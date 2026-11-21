@@ -212,6 +212,72 @@
   };
   AudioSystem.prototype.uiClick = function () { this._tone(700, 0.05, 'square', 0.1); };
 
+  // ---- v4: weather, rifle, races, heist, relics ----
+  // Rain: a looping buffer of filtered noise, kept quiet and steady. One
+  // buffer source lives for the whole session; setRain only moves its gain.
+  AudioSystem.prototype.setRain = function (level) {
+    if (!this.ctx) return;
+    if (!this.rainSrc) {
+      var len = this.ctx.sampleRate * 2;
+      var buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      var data = buf.getChannelData(0);
+      for (var i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      var src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      var f = this.ctx.createBiquadFilter();
+      f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.4;
+      this.rainGain = this.ctx.createGain();
+      this.rainGain.gain.value = 0;
+      src.connect(f); f.connect(this.rainGain); this.rainGain.connect(this.master);
+      src.start();
+      this.rainSrc = src;
+    }
+    var t = this.ctx.currentTime;
+    this.rainGain.gain.setTargetAtTime(level * 0.1, t, 0.5);
+  };
+
+  // Thunder: a long low rumble that starts soft, swells, and rolls off.
+  AudioSystem.prototype.thunder = function (strength) {
+    if (!this.ctx) return;
+    var s = strength || 0.6;
+    this._noiseBurst(1.6, 120, 0.5 * s);
+    this._tone(45, 1.4, 'sine', 0.4 * s);
+    this._noiseBurst(0.9, 200, 0.25 * s);
+  };
+
+  // The rifle: a sharp crack with a long tail — heavier than the pistol,
+  // slower than the SMG, and it echoes across the bay.
+  AudioSystem.prototype.rifleShot = function () {
+    this._noiseBurst(0.22, 1400, 0.65);
+    this._tone(120, 0.25, 'sine', 0.4);
+    this._noiseBurst(0.5, 600, 0.15);
+  };
+
+  // Race countdown beeps: 1 = a short beep, 2 = the GO beep (higher, longer).
+  AudioSystem.prototype.raceBeep = function (kind) {
+    if (kind === 2) {
+      this._tone(1046, 0.35, 'square', 0.2);
+      this._tone(1318, 0.35, 'sine', 0.15, 0.05);
+    } else {
+      this._tone(880, 0.14, 'square', 0.18);
+    }
+  };
+
+  // The vault alarm: three rising whoops while Leo holds the crack.
+  AudioSystem.prototype.heistAlarm = function () {
+    this._tone(620, 0.22, 'square', 0.14);
+    this._tone(780, 0.22, 'square', 0.14, 0.26);
+    this._tone(940, 0.22, 'square', 0.14, 0.52);
+  };
+
+  // A relic found: a bright little arpeggio, gold in sound form.
+  AudioSystem.prototype.relicChime = function () {
+    this._tone(1046, 0.12, 'sine', 0.2);
+    this._tone(1318, 0.12, 'sine', 0.2, 0.1);
+    this._tone(1568, 0.22, 'sine', 0.22, 0.2);
+  };
+
   // Three radio stations, one bass loop each, plus a melody line on top:
   // SUNSET FM (Am–F–C–G, mellow), BAY 104 (Dm–Bb–F–C, faster, minor),
   // PALMERA GOLD (C–Am–F–G, bright). Key R cycles the station.

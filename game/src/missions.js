@@ -65,6 +65,33 @@
         { type: 'hold', text: 'Untie the boat — stay in the marker', holdS: 4 },
         { type: 'escape', text: 'Reach the boat and vanish', markerAt: 'boat', wanted: 4 }
       ]
+    },
+    {
+      // Act two — the crew job. M6 was Leo alone; M7 brings the crew in.
+      // Maya drives, Doc cracks, Slim watches — and Leo does the running.
+      id: 'M7', name: 'The Setup',
+      briefing: 'The crew is waiting at Port North. Maya, Doc and Slim — and a job that needs four people.',
+      reward: 2500,
+      stages: [
+        { type: 'driveTo', text: 'Drive to Port North and meet the crew', markerAt: 'port' },
+        { type: 'pickup', text: 'Pick up Doc at the port yard' },
+        { type: 'timed', text: 'Scout the bank — get there in time', markerAt: 'bank', time: 60 },
+        { type: 'hold', text: 'Hold the lookout post — stay in the marker', holdS: 4 }
+      ]
+    },
+    {
+      // The finale: the vault again, but bigger — five guards, a six-second
+      // crack, three duffels on the floor, and a five-star run to the boat
+      // past the lighthouse. Finish this and the Palmera Job is done.
+      id: 'M8', name: 'The Sunset Heist',
+      briefing: 'The vault. The whole crew. Five stars on the way out. This is the one they will tell stories about.',
+      reward: 15000,
+      stages: [
+        { type: 'driveTo', text: 'Get to the bank — the crew is in place', markerAt: 'bank' },
+        { type: 'shootout', text: 'Take down the vault guards (5)', enemies: 5 },
+        { type: 'hold', text: 'Crack the vault — stay in the marker', holdS: 6 },
+        { type: 'escape', text: 'Escape to the boat — 5 stars on your tail', markerAt: 'boat', wanted: 5 }
+      ]
     }
   ];
 
@@ -77,7 +104,9 @@
     bank: { x: 81, z: 54 },
     pier: { x: CFG.PIER_X, z: CFG.BEACH_Z + 4 },
     boat: { x: CFG.PIER_X, z: CFG.PIER_END_Z + 6 },
-    safehouse: { x: -81, z: 54 }
+    safehouse: { x: -81, z: 54 },
+    // Port North yard, where the M7 crew waits by the containers.
+    port: { x: 0, z: -260 }
   };
 
   function MissionSystem(scene, rng, world) {
@@ -182,9 +211,12 @@
     },
     hold: function (m) {
       var hp = m.roadTarget();
-      // M5 cracks the vault at the bank, M6 unties the boat at the pier
+      // M5 cracks the vault at the bank, M6 unties the boat at the pier,
+      // M7 holds the lookout post by the bank, M8 cracks the vault again
       if (m.active.def.id === 'M5') hp = PLACES.bank;
       if (m.active.def.id === 'M6') hp = PLACES.pier;
+      if (m.active.def.id === 'M7') hp = PLACES.bank;
+      if (m.active.def.id === 'M8') hp = PLACES.bank;
       m.setTarget(hp.x, hp.z);
     }
   };
@@ -196,7 +228,9 @@
     pickup: function (m) {
       if (!m._nearTarget(6)) return false;
       m.removePassenger();
-      if (m.world.hud) m.world.hud.notify('Ray is in the car. Go!', 'good');
+      // M2 picks up Ray; M7 picks up Doc from the port crew
+      var who = (m.active.def.id === 'M7') ? 'Doc' : 'Ray';
+      if (m.world.hud) m.world.hud.notify(who + ' is in the car. Go!', 'good');
       return true;
     },
     timed: function (m) {

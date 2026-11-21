@@ -39,6 +39,16 @@
     this.clockEl.textContent = '17:24';
     this.packagesEl = el('div', 'packages', tr);
     this.packagesEl.textContent = 'PACKAGES 0/12';
+    // v4 badges: weather (top-right, under the clock) and the relic count
+    this.weatherEl = el('div', 'weather', tr);
+    this.weatherEl.textContent = 'CLEAR';
+    this.relicsEl = el('div', 'relics', tr);
+    this.relicsEl.textContent = 'RELICS 0/10';
+    // v4 live lines: race status and vigilante status, under the objective
+    this.raceEl = el('div', 'race', this.objectivePanel);
+    this.raceEl.style.display = 'none';
+    this.vigilanteEl = el('div', 'vigilante', this.objectivePanel);
+    this.vigilanteEl.style.display = 'none';
     // bottom-left: minimap + health
     var bl = el('div', 'bottom-left', root);
     this.mapCanvas = el('canvas', 'minimap', bl);
@@ -142,6 +152,28 @@
     this.packagesEl.className = 'packages' + (found === total ? ' done' : '');
   };
 
+  // v4 badges: weather line, relic count, race line, vigilante line.
+  HudSystem.prototype.setWeather = function (label) {
+    this.weatherEl.textContent = label;
+    var stormy = /RAIN|STORM/.test(label);
+    this.weatherEl.className = 'weather' + (stormy ? ' wet' : '');
+  };
+
+  HudSystem.prototype.setRelics = function (found, total) {
+    this.relicsEl.textContent = 'RELICS ' + found + '/' + total;
+    this.relicsEl.className = 'relics' + (found === total ? ' done' : '');
+  };
+
+  HudSystem.prototype.setRace = function (text) {
+    this.raceEl.textContent = text || '';
+    this.raceEl.style.display = text ? 'block' : 'none';
+  };
+
+  HudSystem.prototype.setVigilante = function (text) {
+    this.vigilanteEl.textContent = text || '';
+    this.vigilanteEl.style.display = text ? 'block' : 'none';
+  };
+
   HudSystem.prototype.setTaxi = function (text) {
     this.taxiEl.textContent = text || '';
     this.taxiEl.style.display = text ? 'block' : 'none';
@@ -203,12 +235,16 @@
   HudSystem.prototype.showPause = function (show, stats) {
     this.pauseScreen.style.display = show ? 'flex' : 'none';
     if (show && stats && this.pauseStats) {
+      // v4: 8 jobs now, plus the new run stats (races, relics, vigilante)
       this.pauseStats.innerHTML =
         'Cash $' + stats.cash.toLocaleString('en-US') +
-        ' &nbsp;•&nbsp; Jobs ' + stats.missionsDone + '/6' +
+        ' &nbsp;•&nbsp; Jobs ' + stats.missionsDone + '/' + (stats.missionsTotal || 8) +
         ' &nbsp;•&nbsp; Kills ' + stats.kills +
         ' &nbsp;•&nbsp; Cars stolen ' + stats.carsStolen +
         ' &nbsp;•&nbsp; Packages ' + stats.packages + '/12' +
+        ' &nbsp;•&nbsp; Relics ' + (stats.relics || 0) + '/10' +
+        ' &nbsp;•&nbsp; Races won ' + (stats.racesWon || 0) +
+        ' &nbsp;•&nbsp; Vigilante ' + (stats.vigilanteJobs || 0) +
         ' &nbsp;•&nbsp; Taxi $' + stats.taxiEarned.toLocaleString('en-US') +
         ' &nbsp;•&nbsp; ' + stats.playTime;
     }
@@ -269,6 +305,28 @@
     (world.packages || []).forEach(function (pk) {
       if (!pk.taken) blip(pk.x, pk.z, '#3ddc5a', 2.5);
     });
+    // nearest Sunset Relic (gold diamond) — the hunt's next target
+    if (world.nearestRelic) {
+      var nr = toMap(world.nearestRelic.x, world.nearestRelic.z);
+      ctx.fillStyle = '#ffd21f';
+      ctx.save();
+      ctx.translate(nr[0], nr[1]);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-3, -3, 6, 6);
+      ctx.restore();
+    }
+    // active race checkpoint (gold ring)
+    if (world.raceTarget) {
+      var rt = toMap(world.raceTarget.x, world.raceTarget.z);
+      ctx.strokeStyle = '#ffd21f'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(rt[0], rt[1], 6, 0, Math.PI * 2); ctx.stroke();
+    }
+    // vigilante runner (red ring) — the car Leo is chasing
+    if (world.vigilanteTarget) {
+      var vt = toMap(world.vigilanteTarget.x, world.vigilanteTarget.z);
+      ctx.strokeStyle = '#ff2020'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(vt[0], vt[1], 6, 0, Math.PI * 2); ctx.stroke();
+    }
     // mission marker
     if (world.missionTarget) {
       var m = toMap(world.missionTarget.x, world.missionTarget.z);

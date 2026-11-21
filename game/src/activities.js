@@ -124,6 +124,11 @@
     var dist = Game.dist2D(from.x, from.z, to.x, to.z);
     if (dist < 60) { to.x += 120; to.z += 60; dist = Game.dist2D(from.x, from.z, to.x, to.z); }
     var fare = Math.round(CFG.TAXI_FARE_BASE + dist * CFG.TAXI_FARE_PER_M);
+    // night premium: after dark the fare is 1.5x — the clubs pay, and the
+    // drivers who work the strip get paid for it
+    var night = w.app && w.app.hour !== undefined ?
+      (w.app.hour >= CFG.NIGHT_START_HOUR || w.app.hour < CFG.DAWN_HOUR) : false;
+    if (night) fare = Math.round(fare * CFG.NIGHT_TAXI_MULT);
     // passenger waits at the pickup point (a pedestrian in a yellow shirt)
     var mesh = new THREE.Group();
     var torso = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.68, 0.32),
@@ -155,7 +160,8 @@
       startX: from.x, startZ: from.z
     };
     if (w.hud) {
-      w.hud.notify('TAXI JOB: pick up the passenger — $' + fare + ' if you make it in time.', 'mission');
+      w.hud.notify('TAXI JOB: pick up the passenger — $' + fare + ' if you make it in time.' +
+        (night ? ' (night rate — 1.5x!)' : ''), 'mission');
       w.hud.setTaxi('PICK UP  •  $' + fare + '  •  ' + CFG.TAXI_TIMEOUT_S + 's');
     }
     if (w.audio) w.audio.missionChime();

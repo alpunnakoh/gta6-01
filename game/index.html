@@ -19,13 +19,18 @@
   <div class="menu-inner">
     <div class="menu-kicker">PALMERA BAY &middot; A SUNSET CITY</div>
     <h1>SUNSET<br>SHORES</h1>
-    <p class="subtitle">Leo Marin is back in Palmera Bay — one last job, six missions,<br>
+    <p class="subtitle">Leo Marin is back in Palmera Bay — one last job, eight missions,<br>
     a whole city to steal, drive and outrun. Hunt the 12 smuggler packages,<br>
-    work the taxi cab between jobs, and mind the chopper at 3 stars.</p>
+    work the taxi cab between jobs, and mind the chopper at 3 stars.<br>
+    Then the crew calls: the Sunset Heist, street races, ten golden relics,<br>
+    and weather that turns a dry getaway into a storm.</p>
     <div class="features-strip">
-      <span>6 MISSIONS</span><span>SHOTGUN + SMG</span><span>PAY 'N SPRAY</span>
+      <span>8 MISSIONS</span><span>SHOTGUN + SMG + RIFLE</span><span>PAY 'N SPRAY</span>
       <span>STUNT RAMPS</span><span>3 RADIO STATIONS</span><span>ROADBLOCKS AT 4★</span>
       <span>CITY BUS</span><span>CINEMATIC CAM</span>
+      <span>STREET RACES</span><span>THE SUNSET HEIST</span><span>WEATHER</span>
+      <span>PORT NORTH</span><span>SUNSET RELICS</span><span>VIGILANTE</span>
+      <span>MARINA GARAGE</span><span>NIGHTLIFE</span>
     </div>
     <div class="menu-buttons">
       <button id="btn-new" class="btn primary">NEW GAME</button>
@@ -73,7 +78,10 @@
       <tr><td>Left click</td><td>Shoot (hold for the SMG)</td></tr>
       <tr><td>F</td><td>Punch — knocks pedestrians down</td></tr>
       <tr><td>R</td><td>Reload</td></tr>
-      <tr><td>Q / 1 / 2 / 3</td><td>Switch weapon (SMG green crates, shotgun red crates)</td></tr>
+      <tr><td>Q / 1 / 2 / 3 / 4</td><td>Switch weapon (SMG green crates, shotgun red crates, rifle purple crates)</td></tr>
+      <tr><td>G</td><td>Marina Garage — paint, wheels, spoiler, neon, engine, armor (in a car)</td></tr>
+      <tr><td>N</td><td>Street race — at a striped START gate, in a car</td></tr>
+      <tr><td>B</td><td>Vigilante job — stop the runner, earn cash and lose a star (in a car)</td></tr>
       <tr><td>T</td><td>Taxi job — only in a yellow cab</td></tr>
       <tr><td>C</td><td>Cinematic camera — slow orbit around Leo</td></tr>
       <tr><td>V</td><td>Radio station — SUNSET FM / BAY 104 / PALMERA GOLD</td></tr>
@@ -90,7 +98,12 @@
     sun sets, rises and sets again while you play. Hit a yellow ramp fast for a
     $50 stunt jump, and drive into the Pay 'n Spray garage to fix your car and
     lose the heat for $200. Finish a job with no stars at all for a clean-getaway
-    bonus. Your progress saves automatically.</p>
+    bonus. Your progress saves automatically. After dark the beach road lights up
+    with clubs and a night market — and taxi fares pay 1.5x. Rain and storms make
+    the roads slick, so a wet getaway needs a gentler foot. Ten golden Sunset
+    Relics hide around the city (the fifth unlocks the rifle); three street races
+    wait at the striped START gates; and after the first six jobs, the crew is
+    waiting at Port North for the Sunset Heist.</p>
     <div class="menu-buttons">
       <button id="btn-close-help" class="btn primary">CLOSE</button>
     </div>
@@ -112,6 +125,15 @@
 <script src="src/activities.js"></script>
 <script src="src/daynight.js"></script>
 <script src="src/shots.js"></script>
+<script src="src/weather.js"></script>
+<script src="src/racing.js"></script>
+<script src="src/heist.js"></script>
+<script src="src/customize.js"></script>
+<script src="src/arsenal.js"></script>
+<script src="src/collectibles.js"></script>
+<script src="src/vigilante.js"></script>
+<script src="src/district.js"></script>
+<script src="src/nightlife.js"></script>
 <script src="src/main.js"></script>
 </body>
 </html>

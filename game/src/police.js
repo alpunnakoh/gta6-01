@@ -33,6 +33,19 @@
     this.stars = 0; this.hiddenT = 0; this.decayT = 0;
   };
 
+  // The vigilante's reward: the PD drops some heat, because Leo did their
+  // job for them. Returns the new star count. Never goes below zero.
+  WantedSystem.prototype.forgive = function (amount) {
+    var before = this.stars;
+    this.stars = Math.max(0, this.stars - (amount || 1));
+    this.hiddenT = 0; this.decayT = 0;
+    if (this.stars < before && Game.hud) {
+      Game.hud.notify('PD drops a star — good work out there. ' + this.stars +
+        ' star' + (this.stars === 1 ? '' : 's') + ' left.', 'good');
+    }
+    return this.stars;
+  };
+
   // Call each frame. nearestPoliceDist = distance to the closest cop, or 999.
   WantedSystem.prototype.update = function (dt, nearestPoliceDist) {
     if (this.stars === 0) return;

@@ -9,16 +9,22 @@
 //
 // The game itself: SUNSET SHORES, an open-world crime game set in the
 // sun-soaked fictional city of Palmera Bay. Leo Marin, ex-getaway driver,
-// plays "The Palmera Job" (6 story missions, ending with a boat escape at
-// the pier) on foot and by car, with traffic, pedestrians, a city bus on a
-// perimeter loop, a 0-5 star wanted system, pursuing police cruisers, foot
-// cops, a helicopter and roadblocks at 4 stars, pistol, SMG and shotgun
-// combat (headshots pay double, rusher enemies charge with knives), side
-// jobs (taxi fares, hidden smuggler packages), stunt ramps, Pay 'n Spray,
-// a day-night cycle, sprint stamina, three radio stations, a cinematic
-// camera and photo mode, a HUD with minimap, start menu, pause, save/load,
-// synthesised sound and music. Put 3 or 4 PNG or JPEG screenshots in
-// screenshots/ (the first by name is the cover) and run it.
+// plays "The Palmera Job" (8 story missions — M1–M6 plus the crew finale
+// M7 "The Setup" and M8 "The Sunset Heist" — ending with a five-star boat
+// escape at the pier) on foot and by car, with traffic, pedestrians, a city
+// bus on a perimeter loop, a 0-5 star wanted system, pursuing police
+// cruisers, foot cops, a helicopter and roadblocks at 4 stars, pistol, SMG,
+// shotgun and rifle combat (headshots pay double, rusher enemies charge with
+// knives), side jobs (taxi fares with a 1.5x night premium, hidden smuggler
+// packages, 10 Sunset Relics, street races, vigilante runner jobs), stunt
+// ramps, Pay 'n Spray, a Marina Garage for paint, wheels, spoiler, neon,
+// engine and armor, a day-night cycle, sprint stamina, three radio
+// stations, a cinematic camera and photo mode, a HUD with minimap, start
+// menu, pause, save/load, synthesised sound and music — plus a weather
+// system (clear, cloudy, rain, storm, fog) that changes the grip, a Port
+// North district with working gantry cranes, and a nightlife strip of neon
+// clubs and a night market after dark. Put 3 or 4 PNG or JPEG screenshots
+// in screenshots/ (the first by name is the cover) and run it.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

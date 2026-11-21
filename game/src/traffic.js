@@ -17,6 +17,8 @@
     this.cars = [];
     this.buses = [];
     this.hornT = 0;
+    this.rushHour = false;  // 17:00–19:00 adds extra cars to the roads
+    this._rushExtra = [];
     for (var i = 0; i < CFG.TRAFFIC_COUNT; i++) {
       this.spawnCar(true);
     }
@@ -24,6 +26,31 @@
       this.spawnBus(b);
     }
   }
+
+  // Rush hour: the evening commute packs the roads. Extra cars spawn in
+  // (tagged, so they can be taken out again) and the streets get busier
+  // and slower. Morning is quiet — the bay wakes up slowly.
+  TrafficSystem.prototype.setRushHour = function (on) {
+    if (on === this.rushHour) return;
+    this.rushHour = on;
+    if (on) {
+      for (var i = 0; i < CFG.RUSH_HOUR_EXTRA; i++) {
+        var car = this.spawnCar(true);
+        if (car) {
+          car.rushExtra = true;
+          this._rushExtra.push(car);
+        }
+      }
+    } else {
+      for (var j = 0; j < this._rushExtra.length; j++) {
+        var extra = this._rushExtra[j];
+        var idx = this.cars.indexOf(extra);
+        if (idx >= 0) this.cars.splice(idx, 1);
+        this.scene.remove(extra.mesh);
+      }
+      this._rushExtra = [];
+    }
+  };
 
   // The city bus runs the perimeter loop, corner to corner, at a steady
   // crawl — a slow, predictable landmark in the traffic.

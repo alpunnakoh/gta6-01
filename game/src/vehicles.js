@@ -47,6 +47,7 @@
     var body = new THREE.Mesh(new THREE.BoxGeometry(2.0, bodyH, bodyL), bodyMat);
     body.position.y = variant === 'van' ? 0.85 : (variant === 'bus' ? 1.05 : 0.62);
     g.add(body);
+    g.userData.bodyMat = bodyMat; // garage paint jobs recolour this material
     if (variant === 'bus') {
       // long window band down both sides + a destination board up front
       var band = new THREE.Mesh(new THREE.BoxGeometry(2.04, 0.6, 7.6),
@@ -197,6 +198,64 @@
     return false;
   }
   VehicleFactory.damageCar = damageCar;
+
+  // ---- v4 garage helpers: the Marina Garage reworks a car in place ----
+  // Paint: recolour the body material and remember the colour on the car.
+  VehicleFactory.applyPaint = function (car, color) {
+    if (!car || !car.mesh) return;
+    var mat = car.mesh.userData.bodyMat;
+    if (mat) mat.color.setHex(color);
+    car.color = color;
+  };
+
+  // Spoiler: a blade on two struts at the rear, like the sport variant's.
+  // Only one is ever fitted — fitting again is a no-op.
+  VehicleFactory.addSpoilerMesh = function (car) {
+    if (!car || !car.mesh || car.mesh.userData.spoiler) return;
+    var dark = new THREE.MeshLambertMaterial({ color: 0x14161a });
+    var blade = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.08, 0.45), dark);
+    blade.position.set(0, 1.12, -2.1);
+    car.mesh.add(blade);
+    [-0.75, 0.75].forEach(function (x) {
+      var strut = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.28, 0.09), dark);
+      strut.position.set(x, 0.96, -2.1);
+      car.mesh.add(strut);
+    });
+    car.mesh.userData.spoiler = blade;
+  };
+
+  // Neon underglow: a glowing plane under the car plus a soft light pool.
+  // Pass null to take it off. The glow mesh is kept in userData so the
+  // garage can pulse it and the paint job never has to rebuild it.
+  VehicleFactory.addNeonMesh = function (car, color) {
+    if (!car || !car.mesh) return;
+    var old = car.mesh.userData.neonGlow;
+    if (old) {
+      car.mesh.remove(old);
+      car.mesh.userData.neonGlow = null;
+    }
+    if (!color) return;
+    var glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.4, 5.6),
+      new THREE.MeshBasicMaterial({
+        color: color, transparent: true, opacity: 0.5,
+        side: THREE.DoubleSide, depthWrite: false
+      }));
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.y = 0.08;
+    car.mesh.add(glow);
+    car.mesh.userData.neonGlow = glow;
+  };
+
+  // Wheels: 0 stock, 1 sport (slightly bigger, lower profile look),
+  // 2 chunky (big off-roaders). Scaling the wheel meshes in place keeps
+  // the steering and spin code untouched.
+  VehicleFactory.applyWheelSize = function (car, size) {
+    if (!car || !car.mesh) return;
+    var wheels = car.mesh.userData.wheels || [];
+    var s = size === 2 ? 1.3 : (size === 1 ? 1.15 : 1);
+    wheels.forEach(function (w) { w.scale.set(s, s, s); });
+  };
 
   // Arcade car step. input: {throttle: -1..1, steer: -1..1, handbrake: bool}
   // dt in seconds. Returns nothing; mutates car.

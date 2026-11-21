@@ -114,10 +114,12 @@
     this.weapon = 'pistol';
     this.hasSmg = false;
     this.hasShotgun = false;
+    this.hasRifle = false;   // the v4 long gun — unlocked from crates or relics
     this.ammo = CFG.PISTOL_MAG;
     this.reserve = 60;
     this.smgAmmo = 0;      // reserve ammo for the SMG, kept separately
     this.shotgunAmmo = 0;  // reserve shells for the shotgun, kept separately
+    this.rifleAmmo = 0;    // reserve rounds for the rifle, kept separately
     this.reloadT = 0;
     this.fireCooldown = 0;
     this.enemies = [];
@@ -208,24 +210,28 @@
   CombatSystem.prototype.reserveFor = function (name) {
     if (name === 'smg') return this.smgAmmo;
     if (name === 'shotgun') return this.shotgunAmmo;
+    if (name === 'rifle') return this.rifleAmmo;
     return this.reserve;
   };
 
   CombatSystem.prototype.takeReserve = function (name, amount) {
     if (name === 'smg') this.smgAmmo -= amount;
     else if (name === 'shotgun') this.shotgunAmmo -= amount;
+    else if (name === 'rifle') this.rifleAmmo -= amount;
     else this.reserve -= amount;
   };
 
   CombatSystem.prototype.stashReserve = function (name, amount) {
     if (name === 'smg') this.smgAmmo += amount;
     else if (name === 'shotgun') this.shotgunAmmo += amount;
+    else if (name === 'rifle') this.rifleAmmo += amount;
     else this.reserve += amount;
   };
 
   CombatSystem.prototype.switchWeapon = function (name) {
     if (name === 'smg' && !this.hasSmg) return false;
     if (name === 'shotgun' && !this.hasShotgun) return false;
+    if (name === 'rifle' && !this.hasRifle) return false;
     if (!WEAPONS[name]) return false;
     if (this.weapon === name) return true;
     // stash the current magazine's ammo in the right reserve first
@@ -243,6 +249,7 @@
     var order = ['pistol'];
     if (this.hasSmg) order.push('smg');
     if (this.hasShotgun) order.push('shotgun');
+    if (this.hasRifle) order.push('rifle');
     var i = order.indexOf(this.weapon);
     return this.switchWeapon(order[(i + 1) % order.length]);
   };
@@ -316,6 +323,7 @@
     if (Game.audio) {
       if (this.weapon === 'smg') Game.audio.smgShot();
       else if (this.weapon === 'shotgun') Game.audio.shotgunBlast();
+      else if (this.weapon === 'rifle') Game.audio.rifleShot();
       else Game.audio.gunshot();
     }
     // raycast against enemies — meshes only: the HP-bar Sprites above their

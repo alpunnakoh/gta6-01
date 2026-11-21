@@ -110,8 +110,37 @@
       player: this.player,
       hud: this.hud,
       audio: this.audio,
+      app: this,
       onCash: this._addCash.bind(this)
     });
+    // ---- v4 systems: weather, racing, heist, garage, arsenal, relics,
+    // vigilante, nightlife. They all share one world object so they can
+    // reach each other (heist watches missions, relics unlock the rifle,
+    // vigilante forgives wanted stars) without a tangle of globals.
+    var world = {
+      scene: this.scene, player: this.player, hud: this.hud,
+      audio: this.audio, app: this, missions: this.missions,
+      combat: this.combat, wanted: this.wanted, police: this.police,
+      traffic: this.traffic, peds: this.peds, activities: this.activities,
+      onCash: this._addCash.bind(this)
+    };
+    this.world = world;
+    this.weather = new Game.WeatherSystem(this.scene, rng, world);
+    world.weather = this.weather;
+    this.racing = new Game.RacingSystem(this.scene, rng, world);
+    world.racing = this.racing;
+    this.heist = new Game.HeistSystem(this.scene, rng, world);
+    world.heist = this.heist;
+    this.customize = new Game.CustomizeSystem(this.scene, rng, world);
+    world.customize = this.customize;
+    this.arsenal = new Game.ArsenalSystem(this.scene, rng, world);
+    world.arsenal = this.arsenal;
+    this.relics = new Game.RelicSystem(this.scene, rng, world);
+    world.relics = this.relics;
+    this.vigilante = new Game.VigilanteSystem(this.scene, rng, world);
+    world.vigilante = this.vigilante;
+    this.nightlife = new Game.NightlifeSystem(this.scene, rng, world);
+    world.nightlife = this.nightlife;
     // Leo's own car (orange) parked on the road by the spawn, facing along it,
     // plus stealable parked cars at the roadside — one of them a sports coupe
     this.playerCar = this._spawnParkedCar(-3.4, 24, 0, CFG.PLAYER_CAR_COLOR, true);
@@ -160,10 +189,14 @@
     var secs = Math.floor(this.playTimeS % 60);
     return {
       cash: this.cash,
-      missionsDone: Math.min(this.missions.index, 6),
+      missionsDone: Math.min(this.missions.index, 8),
+      missionsTotal: 8,
       kills: this.combat.kills,
       carsStolen: this.carsStolen,
       packages: this.activities.packagesFound,
+      relics: this.relics ? this.relics.found : 0,
+      racesWon: this.racing ? this.racing.racesWon : 0,
+      vigilanteJobs: this.vigilante ? this.vigilante.jobsDone : 0,
       taxiEarned: this.activities.taxiEarned,
       playTime: mins + 'm ' + (secs < 10 ? '0' : '') + secs + 's'
     };
@@ -198,6 +231,11 @@
       if (e.code === 'Digit1' && self.state === 'playing') self.combat.switchWeapon('pistol');
       if (e.code === 'Digit2' && self.state === 'playing') self.combat.switchWeapon('smg');
       if (e.code === 'Digit3' && self.state === 'playing') self.combat.switchWeapon('shotgun');
+      // v4 keys: 4 = rifle, G = garage, N = street race, B = vigilante job
+      if (e.code === 'Digit4' && self.state === 'playing') self.combat.switchWeapon('rifle');
+      if (e.code === 'KeyG' && self.state === 'playing') self.customize.toggle();
+      if (e.code === 'KeyN' && self.state === 'playing') self.racing.tryStart();
+      if (e.code === 'KeyB' && self.state === 'playing') self.vigilante.tryStart();
       // C: cinematic camera — a slow orbit around Leo or the car
       if (e.code === 'KeyC' && self.state === 'playing') {
         self.cineMode = !self.cineMode;
@@ -305,7 +343,8 @@
     if (opts.loadSave) save = Game.SaveSystem.load();
     if (save) {
       this.cash = save.cash || 0;
-      this.missions.index = Math.min(save.missionIndex || 0, 5);
+      // v4: eight missions now — an old save capped at 5 would lose M6–M8
+      this.missions.index = Math.min(save.missionIndex || 0, 7);
       this.player.reset(save.x || 0, save.z || 8);
       if (save.hp) this.player.hp = save.hp;
       if (save.hour) this.hour = save.hour;
@@ -313,6 +352,14 @@
       if (save.taxiEarned) this.activities.taxiEarned = save.taxiEarned;
       if (save.kills) this.combat.kills = save.kills;
       if (save.carsStolen) this.carsStolen = save.carsStolen;
+      // v4 systems: races, relics, heist, garage mods, vigilante, rifle, weather
+      if (this.racing) this.racing.restore(save.races);
+      if (this.relics) this.relics.restore(save.relics);
+      if (save.heistDone && this.heist) this.heist.restoreDone();
+      if (this.customize) this.customize.restore(save.custom);
+      if (this.vigilante) this.vigilante.restore(save.vigilante);
+      if (this.arsenal) this.arsenal.restore(save.rifle);
+      if (this.weather && save.weather) this.weather.setWeather(save.weather, true);
       if (!opts.silent) this.hud.notify('Save loaded — welcome back to Palmera Bay.', 'good');
     } else {
       this.cash = 0;
@@ -333,6 +380,8 @@
     this.hud.setHealth(this.player.hp);
     this.hud.setObjective(this.missions.objectiveText());
     this.hud.setPackages(this.activities.packagesFound, CFG.PACKAGE_COUNT);
+    if (this.relics) this.hud.setRelics(this.relics.found, CFG.RELIC_COUNT);
+    if (this.weather) this.hud.setWeather(this.weather.label());
     this.hud.setWeapon('PISTOL', this.combat.ammo, this.combat.reserve);
     this.hud.showCrosshair(true);
     this.player.snapCamera(this.camera);
@@ -377,6 +426,10 @@
     this.cash += def.reward + (cleanBonus || 0);
     this.hud.setCash(this.cash);
     this.audio.cashSound();
+    // the finale: M8's completion ends the Palmera Job — the heist system
+    // runs the fireworks, and the duffel comes off Leo's back
+    if (def.id === 'M8' && this.heist) this.heist.markDone(def);
+    if (this.player.setCarrying) this.player.setCarrying(false);
     this._saveNow();
   };
 
@@ -388,7 +441,15 @@
       packages: Object.keys(this.activities.foundIds).map(Number),
       taxiEarned: this.activities.taxiEarned,
       kills: this.combat.kills,
-      carsStolen: this.carsStolen
+      carsStolen: this.carsStolen,
+      // v4 systems, so a continue lands exactly where the player left off
+      races: this.racing ? this.racing.bestTimes : {},
+      relics: this.relics ? Object.keys(this.relics.foundIds).map(Number) : [],
+      heistDone: this.heist ? this.heist.done : false,
+      custom: this.customize ? this.customize.mods : null,
+      vigilante: this.vigilante ? { rep: this.vigilante.rep, jobs: this.vigilante.jobsDone } : { rep: 0, jobs: 0 },
+      rifle: this.combat ? { has: !!this.combat.hasRifle, ammo: this.combat.rifleAmmo || 0 } : { has: false, ammo: 0 },
+      weather: this.weather ? this.weather.current : 'CLEAR'
     });
   };
 
@@ -438,6 +499,10 @@
     this.player.inCar = car;
     this.player.mesh.visible = false;
     this.driveCamOffset = 0;
+    // v4: the garage mods live on Leo's own car — re-apply them whenever
+    // he gets back in, so a respawn never loses the paint and parts. A
+    // stolen ride stays as it was found; the garage works on his car.
+    if (this.customize && car.owned) this.customize.applyTo(car);
     if (!car.owned && !silent) {
       this.carsStolen++;
       this.wanted.addCrime(1, 'car stolen');
@@ -624,7 +689,13 @@
       ' taxi=' + (this.activities.taxi ? this.activities.taxi.stage : 'none') +
       ' heli=' + (this.police.heli ? 'up' : 'down') +
       ' radio=' + CFG.RADIO_STATIONS[this.audio.radioStation || 0] +
-      ' stamina=' + Math.round(this.player.stamina);
+      ' stamina=' + Math.round(this.player.stamina) +
+      // v4: weather, race, relics, vigilante, heist in the debug readout
+      ' weather=' + (this.weather ? this.weather.current : '—') +
+      ' race=' + (this.racing && this.racing.active ? this.racing.active.def.id + ' cp' + this.racing.active.cp : '—') +
+      ' relics=' + (this.relics ? this.relics.found : 0) + '/' + CFG.RELIC_COUNT +
+      ' vigilante=' + (this.vigilante && this.vigilante.active ? 'RUNNING' : '—') +
+      ' heist=' + (this.heist && this.heist.done ? 'DONE' : '—');
   };
 
   GameApp.prototype._loop = function () {
@@ -652,6 +723,15 @@
       var t = performance.now() * 0.00004;
       this.camera.position.set(Math.sin(t) * 190, 85, Math.cos(t) * 190 + 40);
       this.camera.lookAt(0, 12, 0);
+      // v4: the world keeps living behind the menu — weather rolls on,
+      // the port cranes work, the clubs pulse at night. The day-night
+      // cycle must run first: weather dims the sun multiplicatively, so
+      // without a fresh update each frame the light would fade to black
+      // while the player sits on the menu.
+      if (this.dayNight) this.dayNight.update(this.hour);
+      if (this.weather) this.weather.update(dt, this.hour, this.player);
+      if (Game.city && Game.city.port) Game.city.port.update(dt);
+      if (this.nightlife) this.nightlife.update(dt, this.hour);
       this.traffic.update(dt, null);
       this.peds.update(dt);
       this.renderer.render(this.scene, this.camera);
@@ -692,6 +772,11 @@
         buses: this.traffic.buses,
         enemies: this.combat.enemies,
         packages: this.activities.packages,
+        nearestRelic: this.relics ? this.relics.nearest() : null,
+        raceTarget: this.racing && this.racing.active ?
+          this.racing.active.def.checkpoints[Math.min(this.racing.active.cp, this.racing.active.def.checkpoints.length - 1)] : null,
+        vigilanteTarget: this.vigilante && this.vigilante.active ?
+          { x: this.vigilante.active.runner.x, z: this.vigilante.active.runner.z } : null,
         heli: this.police.heli
       });
       this._updateDebug();
@@ -717,8 +802,10 @@
       var car = this.player.inCar;
       var throttle = (this.keys.KeyW ? 1 : 0) + (this.keys.KeyS ? -1 : 0);
       var steer = (this.keys.KeyA ? -1 : 0) + (this.keys.KeyD ? 1 : 0);
+      // v4: wet roads cut the grip — rain and storms make the car slide
+      var grip = this.weather ? this.weather.gripFactor() : 1;
       Game.CarController.step(car, {
-        throttle: throttle, steer: steer,
+        throttle: throttle * grip, steer: steer,
         handbrake: !!this.keys.Space
       }, dt);
       Game.CarController.chaseCamera(this.camera, car, dt, false, this.driveCamOffset);
@@ -757,6 +844,21 @@
     this.combat.update(dt, this.player);
     this.missions.update(dt);
     this.activities.update(dt);
+    // ---- v4 systems, every playing frame ----
+    // weather first (it dims the light after day/night set it), then the
+    // port cranes, then the gameplay systems, then nightlife last so the
+    // crowd and club lights match the hour.
+    if (this.weather) this.weather.update(dt, this.hour, this.player);
+    if (Game.city && Game.city.port) Game.city.port.update(dt);
+    if (this.racing) this.racing.update(dt);
+    if (this.heist) this.heist.update(dt);
+    if (this.arsenal) this.arsenal.update(dt);
+    if (this.relics) this.relics.update(dt);
+    if (this.vigilante) this.vigilante.update(dt);
+    if (this.customize) this.customize.update(dt);
+    if (this.nightlife) this.nightlife.update(dt, this.hour);
+    // rush hour: 17:00–19:00 packs the roads with extra commuters
+    if (this.traffic) this.traffic.setRushHour(this.hour >= CFG.RUSH_HOUR_START && this.hour < CFG.RUSH_HOUR_END);
     // damage vignette: flash red when Leo's health just dropped
     if (this.player.hp < this._lastHp) {
       this.hud.flashDamage((this._lastHp - this.player.hp) / 30);
@@ -773,7 +875,10 @@
     this.hud.showHitMarker(this.combat.hitMarkerT > 0);
     var stage = this.missions.currentStage();
     if (this.missions.active && stage && stage.type === 'timed') {
-      this.hud.setTimer(this.missions.timer / CFG.M3_TIME_LIMIT_S);
+      // per-stage limit: M3 runs 95s, M7 scouts the bank in 60s — the bar
+      // is the fraction of the stage's own clock, not always M3's
+      var limit = stage.time || CFG.M3_TIME_LIMIT_S;
+      this.hud.setTimer(this.missions.timer / limit);
     } else {
       this.hud.setTimer(null);
     }
@@ -794,6 +899,11 @@
         enemies: this.combat.enemies,
         packages: this.activities.packages,
         taxiTarget: taxiTarget,
+        nearestRelic: this.relics ? this.relics.nearest() : null,
+        raceTarget: this.racing && this.racing.active ?
+          this.racing.active.def.checkpoints[Math.min(this.racing.active.cp, this.racing.active.def.checkpoints.length - 1)] : null,
+        vigilanteTarget: this.vigilante && this.vigilante.active ?
+          { x: this.vigilante.active.runner.x, z: this.vigilante.active.runner.z } : null,
         heli: this.police.heli
       });
     }

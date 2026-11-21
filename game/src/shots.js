@@ -20,7 +20,9 @@
       g.startGame({ skipMenu: true, silent: true });
       if (shot === 'chase') {
         // M2 escape at 4 stars: Leo driving, 2 cruisers closing in head-on,
-        // the police chopper circling above with its searchlight on him
+        // the police chopper circling above with its searchlight on him.
+        // A storm rolls in behind him — rain on the lens, lightning in the
+        // sky, wet roads — so the cover shot sells the weather system too.
         g.missions.startMission(1);
         g.missions.removePassenger();
         g.missions.active.stage = 1;
@@ -54,6 +56,12 @@
         });
         g.player.camYaw = Math.PI;
         Game.CarController.chaseCamera(g.camera, car, 0.016, true);
+        // v4: storm over the chase — the weather system runs a frame so the
+        // rain sheet and the dimmed light are visible in the still
+        if (g.weather) {
+          g.weather.setWeather('STORM', true);
+          g.weather.update(0.016, g.hour, g.player);
+        }
       } else if (shot === 'street') {
         // on foot on a busy sidewalk: traffic (incl. a taxi), pedestrians,
         // a glowing smuggler package, and the city behind
@@ -98,6 +106,9 @@
           pk.x = 8; pk.z = 54 + 9.4;
           pk.mesh.position.set(8, 0, 54 + 9.4);
         }
+        // v4: clear morning sky for the street shot — the city at its
+        // cleanest, with the new club fronts and market visible down the road
+        if (g.weather) g.weather.setWeather('CLEAR', true);
       } else if (shot === 'combat') {
         // M4 shootout with the SHOTGUN: enemies ahead, muzzle flash held at
         // the gun (not floating mid-air), 2 wanted stars. The shotgun's wide
@@ -128,7 +139,9 @@
         g.combat.keepFlash = true;
         g.combat.flashSprite.visible = true;
         g.combat.flashLight.intensity = 3;
-        g.combat.flashSprite.scale.set(2.2, 2.2, 1);
+        // v4 fix: the flash was 2.2 and swamped the gun — 1.8 keeps the
+        // burst without hiding Leo's hand behind it
+        g.combat.flashSprite.scale.set(1.8, 1.8, 1);
         // flash at Leo's gun hand: just ahead of him, low, in front of camera
         g.combat.flashSprite.position.set(0.4, 1.5, 17.6);
         g.combat.flashLight.position.set(0.4, 1.5, 17.6);

@@ -38,6 +38,15 @@
     return hour >= CFG.NIGHT_START_HOUR || hour < CFG.DAWN_HOUR;
   };
 
+  // Weather dim: the weather system calls this after update() has set the
+  // light for the hour, so a storm can darken the sun and hemisphere
+  // without fighting the day-night cycle — update() resets it next frame.
+  DayNight.prototype.setWeatherDim = function (factor) {
+    if (!this.city) return;
+    if (this.city.sun) this.city.sun.intensity *= factor;
+    if (this.city.hemi) this.city.hemi.intensity *= (0.6 + 0.4 * factor);
+  };
+
   DayNight.prototype.update = function (hour) {
     if (!this.city) return;
     var h = hour % 24;

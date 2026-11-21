@@ -182,5 +182,27 @@
     this.hp = Math.min(CFG.PLAYER_HP, this.hp + amount);
   };
 
+  // The heist duffel: a cash bag strapped to Leo's back, shown while he
+  // carries the vault money. Pass false to take it off (after a mission
+  // ends, or when he is busted). The bag is built once and kept in the
+  // mesh's userData so it never leaks a new mesh per call.
+  PlayerController.prototype.setCarrying = function (on) {
+    var u = this.mesh.userData;
+    if (on && !u.duffel) {
+      var bag = new THREE.Group();
+      var sack = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.3),
+        new THREE.MeshLambertMaterial({ color: 0x1c4a6a }));
+      sack.position.y = 0;
+      var flap = new THREE.Mesh(new THREE.BoxGeometry(0.57, 0.16, 0.32),
+        new THREE.MeshLambertMaterial({ color: 0x111111 }));
+      flap.position.y = 0.36;
+      bag.add(sack, flap);
+      bag.position.set(0, 1.25, -0.28);
+      this.mesh.add(bag);
+      u.duffel = bag;
+    }
+    if (u.duffel) u.duffel.visible = !!on;
+  };
+
   Game.PlayerController = PlayerController;
 })();

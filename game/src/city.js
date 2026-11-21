@@ -223,6 +223,24 @@
     lh.add(lampRoom, lampBulb, beamPivot);
     lh.position.set(CFG.PIER_X - 26, 0, CFG.PIER_END_Z + 14);
     group.add(lh);
+    // rocks under the lighthouse: the rifle crate and the lighthouse relic
+    // sit on this outcrop, not on open water — the ocean plane starts at
+    // OCEAN_Z and the pier ends 14 m short of the tower
+    var rockMat = new THREE.MeshLambertMaterial({ color: 0x5a5a52, flatShading: true });
+    [
+      { x: -134, z: 310, s: 5.5, y: 0.7 },
+      { x: -138, z: 304, s: 3.6, y: 0.5 },
+      { x: -130, z: 303, s: 3.2, y: 0.45 },
+      { x: -134, z: 300, s: 2.6, y: 0.4 },
+      { x: -139, z: 312, s: 3.0, y: 0.5 },
+      { x: -129, z: 311, s: 2.4, y: 0.4 }
+    ].forEach(function (r) {
+      var rock = new THREE.Mesh(new THREE.DodecahedronGeometry(r.s, 0), rockMat);
+      rock.position.set(r.x, r.y, r.z);
+      rock.scale.y = 0.45;
+      rock.rotation.y = rng() * Math.PI;
+      group.add(rock);
+    });
     // boardwalk shops: small striped huts along the sand
     var shopCols = [0xff6b6b, 0x4ecdc4, 0xffd21f, 0x7a4ec8, 0xff8c42];
     for (var i = 0; i < 5; i++) {
@@ -491,10 +509,20 @@
       }
     }
 
+    // ---- Port North: the new district north of the grid ----
+    // district.js builds the yard and pushes its colliders into the same
+    // array, so cars and Leo collide with the warehouses and containers
+    // exactly like the downtown buildings.
+    var port = null;
+    if (Game.buildPortDistrict) {
+      port = Game.buildPortDistrict(scene, rng, colliders);
+    }
+
     scene.add(group);
     Game.city = {
       group: group,
       colliders: colliders,
+      port: port,
       buildingCount: buildingCount,
       palmCount: palmCount,
       sun: sun,

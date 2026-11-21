@@ -132,9 +132,62 @@
     HORN_RANGE: 18,           // traffic honks when the player blocks the road
 
     // ---- missions ("The Palmera Job") ----
-    MISSION_REWARDS: [500, 800, 1200, 2000, 5000, 8000],
+    MISSION_REWARDS: [500, 800, 1200, 2000, 5000, 8000, 2500, 15000],
     M3_TIME_LIMIT_S: 95,
     M6_HOLD_S: 4,
+    M8_HOLD_S: 6,
+
+    // ---- weather (new in v4: rain, storm, fog, clouds) ----
+    WEATHER_CHANGE_MIN_S: 75,   // seconds between weather rolls
+    WEATHER_CHANGE_MAX_S: 150,
+    WEATHER_RAIN_GRIP: 0.85,    // wet roads: less grip
+    WEATHER_STORM_GRIP: 0.78,
+    WEATHER_FOG_GRIP: 0.95,
+    WEATHER_RAIN_DROPS: 900,
+
+    // ---- street racing (new in v4) ----
+    RACE_PRIZES: [1500, 800, 400], // 1st / 2nd / 3rd
+    RACE_COUNTDOWN_S: 3,
+    RACE_RIVALS: 3,
+
+    // ---- the sunset heist (M7-M8, new in v4) ----
+    M7_REWARD: 2500,
+    M8_REWARD: 15000,
+    HEIST_BAG_CASH: 1000,       // each cash duffel grabbed at the vault
+    HEIST_BAG_COUNT: 3,
+
+    // ---- sunset relics (new in v4: golden idols hidden in the city) ----
+    RELIC_COUNT: 10,
+    RELIC_CASH: 250,
+    RELIC_ALL_BONUS: 2000,
+
+    // ---- vigilante jobs (new in v4) ----
+    VIGILANTE_REWARD: 300,
+    VIGILANTE_TIME_S: 90,
+    VIGILANTE_COOLDOWN_S: 45,
+    VIGILANTE_HITS: 3,
+
+    // ---- vehicle customisation (new in v4, Marina Garage) ----
+    CUSTOM_PAINT_COST: 150,
+    CUSTOM_WHEEL_COST: 200,
+    CUSTOM_SPOILER_COST: 250,
+    CUSTOM_NEON_COST: 300,
+    CUSTOM_ENGINE_COSTS: [500, 900, 1500], // +3 top speed a level
+    CUSTOM_ARMOR_COSTS: [400, 800],        // +50 max car health a level
+
+    // ---- rifle (new in v4: long-range, slow, heavy) ----
+    RIFLE_DAMAGE: 55,
+    RIFLE_MAG: 8,
+    RIFLE_RELOAD_S: 2.2,
+    RIFLE_RANGE: 140,
+    RIFLE_FIRE_RATE: 0.9,
+    RIFLE_PICKUP_COUNT: 2,
+    RIFLE_PICKUP_AMMO: 40,
+
+    // ---- nightlife (new in v4: neon clubs + night market) ----
+    NIGHT_CROWD_MAX: 8,
+    NIGHT_START: 20,            // clubs and market light up after this hour
+    NIGHT_END: 5,
 
     // ---- palette (sun-soaked Palmera Bay) ----
     COLORS: {
