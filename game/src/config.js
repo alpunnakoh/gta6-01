@@ -1,6 +1,7 @@
 // SUNSET SHORES — config.js
-// All tuning constants, colours and world layout for the Palmera Bay open world.
-// One place to tune the whole game: no magic numbers scattered in systems.
+// Every tuning constant, colour and world fact for the Palmera Bay open
+// world lives here. One file to tune the whole game: systems read from CFG
+// and never carry their own magic numbers, so a balance pass is one edit.
 (function () {
   'use strict';
 
@@ -14,10 +15,14 @@
     BEACH_Z: 246,             // sand strip starts here (south edge)
     OCEAN_Z: 262,             // water starts here
     WORLD_HALF: 320,          // hard boundary for the player
+    PIER_X: -108,             // boardwalk pier jutting into the ocean
+    PIER_END_Z: 296,          // boat at the end of the pier
 
     // ---- time / sun ----
     DAY_LENGTH_S: 600,        // full in-game day in real seconds
     START_HOUR: 17.4,         // golden-hour start (sunset vibe)
+    NIGHT_START_HOUR: 20,     // lamps on, sky dark after this hour
+    DAWN_HOUR: 6.5,           // sky brightens again after this hour
 
     // ---- player on foot ----
     WALK_SPEED: 6,
@@ -27,17 +32,28 @@
     PLAYER_RADIUS: 0.7,
     PLAYER_HEIGHT: 1.8,
     PLAYER_HP: 100,
+    HEALTH_REGEN_DELAY_S: 8,  // seconds without damage before healing starts
+    HEALTH_REGEN_RATE: 6,     // HP per second while regenerating
+    PUNCH_DAMAGE: 25,
+    PUNCH_RANGE: 2.4,
+    PUNCH_ARC: 1.1,           // radians either side of the facing direction
+    PUNCH_COOLDOWN_S: 0.45,
 
     // ---- cars (arcade physics) ----
     CAR_ACCEL: 16,
     CAR_BRAKE: 30,
     CAR_REVERSE_ACCEL: 10,
     CAR_MAX_SPEED: 34,        // ~122 km/h feel
+    SPORT_TOP_SPEED: 42,      // sports coupe: the fastest wheels in the bay
+    VAN_TOP_SPEED: 26,        // delivery van: slow but sturdy
+    TAXI_TOP_SPEED: 32,
     CAR_MAX_REVERSE: 10,
     CAR_STEER: 0.55,          // rad/s at full lock, scaled by speed
     CAR_DRAG: 0.6,
     CAR_HANDBRAKE: 22,
     CAR_RADIUS: 1.6,
+    CAR_HEALTH: 100,          // collisions wear a car down; at 0 it is wrecked
+    CAR_SMOKE_BELOW: 45,      // health under this and the car smokes
     PLAYER_CAR_COLOR: 0xff7a1a,
     TAXI_COLOR: 0xffd21f,
 
@@ -47,6 +63,7 @@
     PED_COUNT: 22,
     PED_SPEED: 2.2,
     PED_FLEE_SPEED: 5.5,
+    PED_PAUSE_CHANCE: 0.25,   // walkers sometimes stop to check their phone
 
     // ---- police / wanted ----
     WANTED_MAX: 5,
@@ -57,6 +74,9 @@
     POLICE_BUST_TIME: 1.4,
     WANTED_DECAY_HIDE_S: 10,  // seconds unseen before stars start dropping
     WANTED_DECAY_STEP_S: 7,   // seconds per star lost while hidden
+    HELI_MIN_STARS: 3,        // the police chopper joins at 3 stars
+    HELI_HEIGHT: 34,
+    HELI_SPEED: 17,
 
     // ---- combat ----
     PISTOL_DAMAGE: 34,
@@ -64,14 +84,57 @@
     PISTOL_RELOAD_S: 1.1,
     PISTOL_RANGE: 90,
     PISTOL_FIRE_RATE: 0.22,
+    SMG_DAMAGE: 16,
+    SMG_MAG: 30,
+    SMG_RELOAD_S: 1.4,
+    SMG_RANGE: 70,
+    SMG_FIRE_RATE: 0.09,      // hold the trigger: full-auto
+    SMG_PICKUP_COUNT: 3,      // SMG crates hidden around the city
+    SMG_PICKUP_AMMO: 90,
     ENEMY_HP: 100,
     ENEMY_DAMAGE: 9,
     ENEMY_SHOT_INTERVAL: 1.4,
     ENEMY_RANGE: 38,
 
+    // ---- side activities ----
+    PACKAGE_COUNT: 12,        // hidden smuggler packages: cash + health
+    PACKAGE_CASH: 150,
+    PACKAGE_HEAL: 25,
+    TAXI_FARE_BASE: 120,      // flat fare for a taxi job
+    TAXI_FARE_PER_M: 1.2,     // plus this per metre of the trip
+    TAXI_TIMEOUT_S: 90,       // seconds to reach the drop-off
+    STUNT_CASH: 50,           // payout for a ramp jump at speed
+    STUNT_MIN_SPEED: 18,      // car must be this fast over a ramp
+    SPRAY_COST: 200,          // Pay 'n Spray: repair + lose wanted stars
+    SPRAY_RADIUS: 9,          // drive into the garage zone to use it
+    CLEAN_BONUS: 200,         // finish a mission with 0 stars: clean bonus
+
+    // ---- weapons (third: the shotgun) ----
+    SHOTGUN_DAMAGE: 18,       // per pellet, 6 pellets per shell
+    SHOTGUN_PELLETS: 6,
+    SHOTGUN_MAG: 6,
+    SHOTGUN_RELOAD_S: 2.0,
+    SHOTGUN_RANGE: 45,
+    SHOTGUN_FIRE_RATE: 0.8,
+    SHOTGUN_PICKUP_COUNT: 2,  // shotgun crates (red) hidden in the city
+    SHOTGUN_PICKUP_AMMO: 24,
+
+    // ---- radio ----
+    RADIO_STATIONS: ['SUNSET FM', 'BAY 104', 'PALMERA GOLD'],
+
+    // ---- stamina ----
+    STAMINA_MAX: 100,
+    STAMINA_DRAIN: 18,        // per second while sprinting
+    STAMINA_REGEN: 12,        // per second while not sprinting
+
+    // ---- traffic extras ----
+    BUS_COUNT: 2,             // city buses on a fixed loop route
+    HORN_RANGE: 18,           // traffic honks when the player blocks the road
+
     // ---- missions ("The Palmera Job") ----
-    MISSION_REWARDS: [500, 800, 1200, 2000, 5000],
+    MISSION_REWARDS: [500, 800, 1200, 2000, 5000, 8000],
     M3_TIME_LIMIT_S: 95,
+    M6_HOLD_S: 4,
 
     // ---- palette (sun-soaked Palmera Bay) ----
     COLORS: {
@@ -88,11 +151,14 @@
       palmTrunk: 0x8a6b46,
       palmLeaf: 0x3f8f4f,
       policeWhite: 0xf2f2f2,
-      policeBlack: 0x1c2430
+      policeBlack: 0x1c2430,
+      nightSky: 0x0d1526,
+      nightFog: 0x1a2233,
+      lampGlow: 0xffe9b0
     },
 
     // ---- save ----
-    SAVE_KEY: 'sunset-shores-save-v1'
+    SAVE_KEY: 'sunset-shores-save-v2'
   };
 
   // Deterministic RNG (mulberry32) so the city and every staged screenshot
@@ -120,6 +186,13 @@
     var rz = Math.abs(z - nearestRoadCoord(z));
     return rx <= CFG.ROAD_WIDTH / 2 + 0.6 || rz <= CFG.ROAD_WIDTH / 2 + 0.6;
   }
+  // Blend two hex colours by t (0..1) and return a hex number.
+  function mixHex(a, b, t) {
+    var ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+    var br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+    var r = Math.round(lerp(ar, br, t)), g = Math.round(lerp(ag, bg, t)), bl = Math.round(lerp(ab, bb, t));
+    return (r << 16) | (g << 8) | bl;
+  }
 
   window.Game = window.Game || {};
   Game.CFG = CFG;
@@ -129,4 +202,5 @@
   Game.dist2D = dist2D;
   Game.nearestRoadCoord = nearestRoadCoord;
   Game.isOnRoad = isOnRoad;
+  Game.mixHex = mixHex;
 })();

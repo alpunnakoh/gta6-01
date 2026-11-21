@@ -19,14 +19,20 @@
   <div class="menu-inner">
     <div class="menu-kicker">PALMERA BAY &middot; A SUNSET CITY</div>
     <h1>SUNSET<br>SHORES</h1>
-    <p class="subtitle">Leo Marin is back in Palmera Bay — one last job, five missions,<br>
-    a whole city to steal, drive and outrun.</p>
+    <p class="subtitle">Leo Marin is back in Palmera Bay — one last job, six missions,<br>
+    a whole city to steal, drive and outrun. Hunt the 12 smuggler packages,<br>
+    work the taxi cab between jobs, and mind the chopper at 3 stars.</p>
+    <div class="features-strip">
+      <span>6 MISSIONS</span><span>SHOTGUN + SMG</span><span>PAY 'N SPRAY</span>
+      <span>STUNT RAMPS</span><span>3 RADIO STATIONS</span><span>ROADBLOCKS AT 4★</span>
+      <span>CITY BUS</span><span>CINEMATIC CAM</span>
+    </div>
     <div class="menu-buttons">
       <button id="btn-new" class="btn primary">NEW GAME</button>
       <button id="btn-continue" class="btn">CONTINUE</button>
       <button id="btn-help" class="btn">HOW TO PLAY</button>
     </div>
-    <p class="menu-foot">WASD move &middot; mouse drag camera &middot; E enter car &middot; Shift run &middot; Space jump / handbrake &middot; click shoot &middot; R reload &middot; J start job &middot; Esc pause &middot; M mute</p>
+    <p class="menu-foot">WASD move &middot; mouse drag camera &middot; E enter car &middot; Shift run &middot; Space jump / handbrake &middot; click shoot &middot; F punch &middot; R reload &middot; Q switch weapon &middot; T taxi job &middot; J start job &middot; C cinematic cam &middot; V radio &middot; P photo mode &middot; Esc pause &middot; M mute</p>
   </div>
 </div>
 
@@ -35,6 +41,7 @@
   <div class="menu-inner">
     <h2>PAUSED</h2>
     <p class="subtitle">Palmera Bay waits for no one. Well — except now.</p>
+    <p id="pause-stats" class="stats-line"></p>
     <div class="menu-buttons">
       <button id="btn-resume" class="btn primary">RESUME</button>
       <button id="btn-quit-menu" class="btn">QUIT TO MENU</button>
@@ -63,8 +70,14 @@
       <tr><td>Shift</td><td>Run</td></tr>
       <tr><td>Space</td><td>Jump on foot / handbrake in a car</td></tr>
       <tr><td>E</td><td>Enter / exit the nearest car</td></tr>
-      <tr><td>Left click</td><td>Shoot the pistol (on foot)</td></tr>
+      <tr><td>Left click</td><td>Shoot (hold for the SMG)</td></tr>
+      <tr><td>F</td><td>Punch — knocks pedestrians down</td></tr>
       <tr><td>R</td><td>Reload</td></tr>
+      <tr><td>Q / 1 / 2 / 3</td><td>Switch weapon (SMG green crates, shotgun red crates)</td></tr>
+      <tr><td>T</td><td>Taxi job — only in a yellow cab</td></tr>
+      <tr><td>C</td><td>Cinematic camera — slow orbit around Leo</td></tr>
+      <tr><td>V</td><td>Radio station — SUNSET FM / BAY 104 / PALMERA GOLD</td></tr>
+      <tr><td>P</td><td>Photo mode — hide the HUD</td></tr>
       <tr><td>J</td><td>Start the next job</td></tr>
       <tr><td>Esc</td><td>Pause</td></tr>
       <tr><td>M</td><td>Mute / unmute</td></tr>
@@ -72,7 +85,12 @@
     </table>
     <p class="subtitle">Follow the yellow marker. Stealing cars, shooting and hitting
     pedestrians raise your wanted level — hide from the police until the stars drop.
-    Your progress saves automatically.</p>
+    At 3 stars the PD chopper joins the hunt; at 4 stars they throw a roadblock
+    across the road ahead. Green packages around the city pay $150 each, and the
+    sun sets, rises and sets again while you play. Hit a yellow ramp fast for a
+    $50 stunt jump, and drive into the Pay 'n Spray garage to fix your car and
+    lose the heat for $200. Finish a job with no stars at all for a clean-getaway
+    bonus. Your progress saves automatically.</p>
     <div class="menu-buttons">
       <button id="btn-close-help" class="btn primary">CLOSE</button>
     </div>
@@ -91,6 +109,8 @@
 <script src="src/hud.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/save.js"></script>
+<script src="src/activities.js"></script>
+<script src="src/daynight.js"></script>
 <script src="src/shots.js"></script>
 <script src="src/main.js"></script>
 </body>

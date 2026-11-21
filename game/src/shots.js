@@ -2,7 +2,10 @@
 // ShotStaging: deterministic setups for the 4 competition screenshots, driven
 // by ?shot=chase|street|combat|menu (plus ?shot=vista). Each one puts the
 // player, police, wanted level, mission objective and camera in a fixed,
-// readable state so the screenshot shows several systems at once.
+// readable state so the screenshot shows several systems at once — a chase
+// with the chopper overhead, a busy street with a taxi and a package, a
+// shootout with the shotgun. Notifications are cleared at the end so the frame
+// stays readable.
 (function () {
   'use strict';
 
@@ -16,12 +19,13 @@
       }
       g.startGame({ skipMenu: true, silent: true });
       if (shot === 'chase') {
-        // M2 escape: Leo driving, 2 cruisers closing in head-on, 3 wanted stars
+        // M2 escape at 4 stars: Leo driving, 2 cruisers closing in head-on,
+        // the police chopper circling above with its searchlight on him
         g.missions.startMission(1);
         g.missions.removePassenger();
         g.missions.active.stage = 1;
         g.missions.enterStage();
-        g.wanted.addCrime(1, 'heat is on');
+        g.wanted.addCrime(2, 'heat is on');
         var car = g.playerCar;
         car.x = 0; car.z = -60; car.heading = 0; car.speed = 19;
         car.mesh.position.set(0, 0, -60);
@@ -35,6 +39,11 @@
           pc.speed = 12;
           pc.mesh.position.set(pc.x, 0, pc.z);
         });
+        // the chopper: put it in its orbit right above the player
+        if (g.police.heli) {
+          g.police.heli.x = 14; g.police.heli.z = -46;
+          g.police.heli.mesh.position.set(14, 34, -46);
+        }
         // traffic ahead on the same road for density
         g.traffic.cars.slice(0, 3).forEach(function (tc, i) {
           tc.x = (i % 2 === 0 ? -3.4 : 3.4);
@@ -46,7 +55,8 @@
         g.player.camYaw = Math.PI;
         Game.CarController.chaseCamera(g.camera, car, 0.016, true);
       } else if (shot === 'street') {
-        // on foot on a busy sidewalk: traffic, pedestrians, buildings
+        // on foot on a busy sidewalk: traffic (incl. a taxi), pedestrians,
+        // a glowing smuggler package, and the city behind
         g.missions.startMission(0);
         g.player.reset(-3, 54 + 9.4);
         g.player.camYaw = Math.PI * 0.92;
@@ -62,7 +72,7 @@
           p.fleeT = 0;
           p.mesh.position.set(p.x, 0, p.z);
         });
-        // traffic passing on the road in front of the player
+        // traffic passing on the road in front of the player — first one a taxi
         g.traffic.cars.slice(0, 3).forEach(function (tc, i) {
           tc.x = -30 + i * 22;
           tc.z = 54 + (i % 2 === 0 ? -3.4 : 3.4);
@@ -70,8 +80,28 @@
           tc.ai.horizontal = true; tc.ai.dir = i % 2 === 0 ? 1 : -1; tc.ai.road = tc.z;
           tc.mesh.position.set(tc.x, 0, tc.z);
         });
+        var taxi = g.traffic.cars[0];
+        if (taxi && !taxi.taxi) {
+          // rebuild the lead car as a taxi so the shot shows the cab
+          var repl = Game.VehicleFactory.createCar({
+            x: taxi.x, z: taxi.z, heading: taxi.heading,
+            color: 0xffd21f, variant: 'taxi'
+          });
+          repl.ai = taxi.ai;
+          g.scene.remove(taxi.mesh);
+          g.scene.add(repl.mesh);
+          g.traffic.cars[0] = repl;
+        }
+        // a smuggler package glowing on the sidewalk corner
+        var pk = g.activities.packages[0];
+        if (pk && !pk.taken) {
+          pk.x = 8; pk.z = 54 + 9.4;
+          pk.mesh.position.set(8, 0, 54 + 9.4);
+        }
       } else if (shot === 'combat') {
-        // M4 shootout: enemies ahead, muzzle flash held, 2 wanted stars
+        // M4 shootout with the SHOTGUN: enemies ahead, muzzle flash held at
+        // the gun (not floating mid-air), 2 wanted stars. The shotgun's wide
+        // blast reads better in a still than the SMG's thin tracer.
         g.missions.startMission(3);
         g.missions.active.stage = 1;
         g.missions.enterStage();
@@ -86,27 +116,35 @@
           e.mesh.position.set(e.x, 0, e.z);
         });
         g.player.snapCamera(g.camera);
-        // fire once toward the middle enemy and hold the flash at the gun
+        // give Leo the shotgun, fire once toward the middle enemy, hold a
+        // big flash right at the gun hand
+        g.combat.hasShotgun = true;
+        g.combat.shotgunAmmo = 24;
+        g.combat.switchWeapon('shotgun');
         var origin = g.camera.position.clone();
         var dir = new THREE.Vector3(-0.1, -0.05, -1).normalize();
         g.combat.shoot(origin, dir);
-        g.combat.ammo = 10;
+        g.combat.ammo = 5;
         g.combat.keepFlash = true;
         g.combat.flashSprite.visible = true;
         g.combat.flashLight.intensity = 3;
-        g.combat.flashSprite.scale.set(2.6, 2.6, 1);
-        g.combat.flashSprite.position.set(0.9, 1.6, 18.2);
-        g.combat.flashLight.position.set(0.9, 1.6, 18.2);
+        g.combat.flashSprite.scale.set(2.2, 2.2, 1);
+        // flash at Leo's gun hand: just ahead of him, low, in front of camera
+        g.combat.flashSprite.position.set(0.4, 1.5, 17.6);
+        g.combat.flashLight.position.set(0.4, 1.5, 17.6);
         // tracer from Leo's gun to the middle enemy
         g.combat.showTracer(
-          new THREE.Vector3(0.9, 1.6, 18.2),
+          new THREE.Vector3(0.4, 1.5, 17.6),
           new THREE.Vector3(-2.5, 1.3, 8));
       } else if (shot === 'vista') {
         g.player.reset(0, 0);
         g.camera.position.set(-40, 90, 190);
         g.camera.lookAt(0, 10, 0);
       }
-      if (g.hud) g.hud.setObjective(g.missions.objectiveText());
+      if (g.hud) {
+        g.hud.clearNotifies();
+        g.hud.setObjective(g.missions.objectiveText());
+      }
     }
   };
 

@@ -1,7 +1,9 @@
 // SUNSET SHORES — traffic.js
-// TrafficSystem: ~14 AI cars that drive the road grid (lane offsets, turns at
-// intersections, slowing for the car ahead). PedestrianSystem: ~20 walkers on
-// the sidewalks who stroll, cross at corners, and run when shots are fired.
+// TrafficSystem: ~14 AI cars in four flavours — sedans, yellow taxis, boxy
+// delivery vans and the occasional sports coupe — driving the road grid
+// (lane offsets, turns at intersections, slowing for the car ahead).
+// PedestrianSystem: ~20 walkers on the sidewalks who stroll, cross at
+// corners, sometimes stop to check their phone, and run when shots are fired.
 (function () {
   'use strict';
   var CFG = Game.CFG;
@@ -13,10 +15,71 @@
     this.scene = scene;
     this.rng = rng;
     this.cars = [];
+    this.buses = [];
+    this.hornT = 0;
     for (var i = 0; i < CFG.TRAFFIC_COUNT; i++) {
       this.spawnCar(true);
     }
+    for (var b = 0; b < CFG.BUS_COUNT; b++) {
+      this.spawnBus(b);
+    }
   }
+
+  // The city bus runs the perimeter loop, corner to corner, at a steady
+  // crawl — a slow, predictable landmark in the traffic.
+  TrafficSystem.prototype.spawnBus = function (index) {
+    var corners = [
+      { x: 216, z: 216 }, { x: -216, z: 216 },
+      { x: -216, z: -216 }, { x: 216, z: -216 }
+    ];
+    var start = corners[index % corners.length];
+    var car = Game.VehicleFactory.createCar({
+      x: start.x, z: start.z, heading: 0,
+      color: 0x4ecdc4, variant: 'bus'
+    });
+    car.ai = { bus: true, wp: (index + 1) % corners.length, speed: 7 };
+    this.scene.add(car.mesh);
+    this.cars.push(car);
+    this.buses.push(car);
+    return car;
+  };
+
+  TrafficSystem.prototype._updateBus = function (car, dt) {
+    var corners = [
+      { x: 216, z: 216 }, { x: -216, z: 216 },
+      { x: -216, z: -216 }, { x: 216, z: -216 }
+    ];
+    var target = corners[car.ai.wp];
+    var dx = target.x - car.x, dz = target.z - car.z;
+    var dist = Math.sqrt(dx * dx + dz * dz) || 1;
+    if (dist < 6) {
+      car.ai.wp = (car.ai.wp + 1) % corners.length;
+      return;
+    }
+    var desired = Math.atan2(dx, dz);
+    var diff = desired - car.heading;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    car.heading += Game.clamp(diff, -1, 1) * 1.4 * dt;
+    var f = Game.CarController.forward(car);
+    car.x += f.x * car.ai.speed * dt;
+    car.z += f.z * car.ai.speed * dt;
+    car.speed = car.ai.speed;
+    car.mesh.position.set(car.x, 0, car.z);
+    car.mesh.rotation.y = car.heading;
+    var spin = car.speed * dt / 0.42;
+    car.wheels.forEach(function (w) { w.rotation.x += spin; });
+  };
+
+  // One in five traffic cars is a taxi, one in seven a van, one in ten a
+  // sports coupe — the street reads as a real mix, not a clone army.
+  TrafficSystem.prototype.pickVariant = function () {
+    var r = this.rng();
+    if (r < 0.2) return { variant: 'taxi', color: CFG.TAXI_COLOR };
+    if (r < 0.34) return { variant: 'van', color: 0xe8e8e8 };
+    if (r < 0.44) return { variant: 'sport', color: 0xd8443c };
+    return { variant: 'sedan', color: TRAFFIC_COLORS[Math.floor(this.rng() * TRAFFIC_COLORS.length)] };
+  };
 
   TrafficSystem.prototype.spawnCar = function (anywhere) {
     var r = this.rng;
@@ -24,12 +87,13 @@
     var horizontal = Math.abs(p.z - Game.nearestRoadCoord(p.z)) < 1;
     var dir = r() < 0.5 ? 1 : -1;
     var heading = horizontal ? (dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (dir > 0 ? 0 : Math.PI);
+    var v = this.pickVariant();
     var car = Game.VehicleFactory.createCar({
       x: p.x, z: p.z, heading: heading,
-      color: TRAFFIC_COLORS[Math.floor(r() * TRAFFIC_COLORS.length)]
+      color: v.color, variant: v.variant
     });
     car.ai = {
-      speed: CFG.TRAFFIC_SPEED * (0.8 + r() * 0.45),
+      speed: CFG.TRAFFIC_SPEED * (0.8 + r() * 0.45) * (v.variant === 'van' ? 0.8 : 1),
       horizontal: horizontal,
       dir: dir,
       road: horizontal ? p.z : p.x,
@@ -43,7 +107,9 @@
 
   TrafficSystem.prototype.update = function (dt, playerCar) {
     var self = this;
+    this.hornT -= dt;
     this.cars.forEach(function (car) {
+      if (car.ai.bus) { self._updateBus(car, dt); return; }
       var ai = car.ai;
       // slow for the car ahead (any car, incl. the player's)
       var f = Game.CarController.forward(car);
@@ -58,6 +124,11 @@
       });
       var target = ai.speed;
       if (aheadDist < 13) target = Math.max(0, ai.speed * (aheadDist - 6) / 7);
+      // stuck behind the player's car: honk, once in a while
+      if (playerCar && aheadDist < CFG.HORN_RANGE && aheadDist < 8 && self.hornT <= 0) {
+        self.hornT = 1.5;
+        if (Game.audio) Game.audio.honk();
+      }
       // move along current road
       var move = Math.min(target, ai.speed) * dt;
       if (ai.horizontal) car.x += ai.dir * move;
@@ -125,8 +196,13 @@
     torso.position.y = 1.1;
     var head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.38), skin);
     head.position.y = 1.65;
-    g.add(legL, legR, torso, head);
-    g.userData = { legL: legL, legR: legR };
+    // a phone in the hand for the ones who stop and check it
+    var phone = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.03),
+      new THREE.MeshLambertMaterial({ color: 0x111111 }));
+    phone.position.set(0.3, 1.25, 0.2);
+    phone.visible = false;
+    g.add(legL, legR, torso, head, phone);
+    g.userData = { legL: legL, legR: legR, phone: phone };
     return g;
   }
 
@@ -151,7 +227,9 @@
       speed: CFG.PED_SPEED * (0.7 + r() * 0.7),
       phase: r() * 6,
       fleeT: 0,
-      fleeX: 0, fleeZ: 0
+      fleeX: 0, fleeZ: 0,
+      idleT: 0,            // standing still, phone out
+      nextIdleIn: 6 + r() * 14
     };
     mesh.rotation.y = horizontal ? (ped.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (ped.dir > 0 ? 0 : Math.PI);
     this.peds.push(ped);
@@ -163,6 +241,8 @@
       var d = Game.dist2D(p.x, p.z, x, z);
       if (d < 45) {
         p.fleeT = 3 + Math.random() * 2;
+        p.idleT = 0;
+        p.mesh.userData.phone.visible = false;
         p.fleeX = x; p.fleeZ = z;
       }
     });
@@ -179,7 +259,19 @@
         var d = Math.sqrt(dx * dx + dz * dz) || 1;
         mx = dx / d; mz = dz / d;
         p.mesh.rotation.y = Math.atan2(mx, mz);
+      } else if (p.idleT > 0) {
+        // standing, phone out — legs still, head down at the screen
+        p.idleT -= dt;
+        if (p.idleT <= 0) {
+          p.mesh.userData.phone.visible = false;
+          p.nextIdleIn = 8 + Math.random() * 16;
+        }
       } else {
+        p.nextIdleIn -= dt;
+        if (p.nextIdleIn <= 0 && Math.random() < CFG.PED_PAUSE_CHANCE) {
+          p.idleT = 2 + Math.random() * 3;
+          p.mesh.userData.phone.visible = true;
+        }
         if (p.horizontal) mx = p.dir;
         else mz = p.dir;
         // reverse at city edge / randomly at intersections
@@ -190,7 +282,7 @@
       p.x += mx * sp * dt;
       p.z += mz * sp * dt;
       p.phase += dt * sp * 2.2;
-      var swing = Math.sin(p.phase) * 0.5;
+      var swing = (p.idleT > 0) ? 0 : Math.sin(p.phase) * 0.5;
       p.mesh.userData.legL.rotation.x = swing;
       p.mesh.userData.legR.rotation.x = -swing;
       p.mesh.position.set(p.x, 0, p.z);

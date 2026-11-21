@@ -1,8 +1,10 @@
 // SUNSET SHORES — main.js
-// Game bootstrap: renderer/scene/loop, input (keyboard + mouse orbit), game
-// states (menu / playing / paused / busted / wasted), car enter/exit, crime
-// detection (stolen cars, hit pedestrians), save/load, the in-game clock,
-// and the #debug status line used for automated validation.
+// Game bootstrap: renderer/scene/loop, input (keyboard + mouse orbit),
+// game states (menu / playing / paused / busted / wasted), car enter/exit,
+// crime detection (stolen cars, hit pedestrians), save/load, the in-game
+// clock with its day-night cycle, side activities (packages, taxi jobs),
+// weapon switching and punching, run statistics, and the #debug status line
+// used for automated validation.
 (function () {
   'use strict';
   var CFG = Game.CFG;
@@ -24,6 +26,7 @@
     this.hour = CFG.START_HOUR;
     this.parkedCars = [];
     this.dragging = false;
+    this.mouseDown = false;
     this.lastMouseX = 0; this.lastMouseY = 0;
     this.movedMouse = 0;
     this.driveCamOffset = 0;
@@ -33,6 +36,17 @@
     this._fpsFrames = 0;
     this._fpsT = 0;
     this.keys = {};
+    this.carsStolen = 0;
+    this.playTimeS = 0;
+    this._lastHp = CFG.PLAYER_HP;
+    this._skidT = 0;
+    // cinematic camera (C): a slow orbit shot around Leo/the car
+    this.cineMode = false;
+    this._cineT = 0;
+    this._fov = 62;           // lerped toward the speed target each frame
+    this._photoMode = false;  // P hides the HUD for clean screenshots
+    this._sprayT = 0;         // dwell time inside the Pay 'n Spray zone
+    this._stuntBounce = 0;    // seconds left of the ramp-jump hop animation
     this._initThree();
     this._initSystems();
     this._initInput();
@@ -70,6 +84,8 @@
     var rng = Game.rng(this.seed);
     this.rng = rng;
     Game.buildCity(this.scene, this.seed);
+    this.dayNight = new Game.DayNight(this.scene);
+    this.dayNight.attach(Game.city);
     this.player = new Game.PlayerController(this.scene);
     this.player.reset(0, 8);
     this.traffic = new Game.TrafficSystem(this.scene, rng);
@@ -90,32 +106,67 @@
       audio: this.audio,
       onMissionComplete: this._onMissionComplete.bind(this)
     });
+    this.activities = new Game.Activities(this.scene, rng, {
+      player: this.player,
+      hud: this.hud,
+      audio: this.audio,
+      onCash: this._addCash.bind(this)
+    });
     // Leo's own car (orange) parked on the road by the spawn, facing along it,
-    // plus stealable parked cars at the roadside
+    // plus stealable parked cars at the roadside — one of them a sports coupe
     this.playerCar = this._spawnParkedCar(-3.4, 24, 0, CFG.PLAYER_CAR_COLOR, true);
-    var parkedColors = [0x3c7ad8, 0xe8e8e8, 0x2a2f38, 0x7a4ec8, 0x4ec8a0, 0xd8443c, 0xffd21f];
-    for (var i = 0; i < 7; i++) {
+    var parked = [
+      { color: 0x3c7ad8, variant: 'sedan' },
+      { color: 0xe8e8e8, variant: 'sedan' },
+      { color: 0x2a2f38, variant: 'sedan' },
+      { color: 0x7a4ec8, variant: 'sedan' },
+      { color: 0xd8443c, variant: 'sport' },
+      { color: 0xffd21f, variant: 'taxi' },
+      { color: 0x4ec8a0, variant: 'sedan' }
+    ];
+    for (var i = 0; i < parked.length; i++) {
       var pt = Game.city.randomRoadPoint(rng);
       var horiz = Math.abs(pt.z - Game.nearestRoadCoord(pt.z)) < 1;
       var heading = horiz ? (pt.x > 0 ? Math.PI / 2 : -Math.PI / 2) : (pt.z > 0 ? 0 : Math.PI);
       // pull to the roadside
       if (horiz) pt.z += 5.6; else pt.x += 5.6;
-      this._spawnParkedCar(pt.x, pt.z, heading, parkedColors[i % parkedColors.length], false);
+      this._spawnParkedCar(pt.x, pt.z, heading, parked[i].color, false, parked[i].variant);
     }
     this.hud.setCash(this.cash);
     this.hud.setWanted(0);
     this.hud.setHealth(this.player.hp);
+    this.hud.setPackages(0, CFG.PACKAGE_COUNT);
+    this.hud.setWeapon('PISTOL', this.combat.ammo, this.combat.reserve);
     this.hud.showMenu(true, Game.SaveSystem.hasSave());
     this.hud.showCrosshair(false);
   };
 
-  GameApp.prototype._spawnParkedCar = function (x, z, heading, color, owned) {
-    var car = Game.VehicleFactory.createCar({ x: x, z: z, heading: heading, color: color });
+  GameApp.prototype._spawnParkedCar = function (x, z, heading, color, owned, variant) {
+    var car = Game.VehicleFactory.createCar({ x: x, z: z, heading: heading, color: color, variant: variant });
     car.owned = !!owned;
     car.parked = true;
     this.scene.add(car.mesh);
     this.parkedCars.push(car);
     return car;
+  };
+
+  GameApp.prototype._addCash = function (amount) {
+    this.cash += amount;
+    this.hud.setCash(this.cash);
+  };
+
+  GameApp.prototype._stats = function () {
+    var mins = Math.floor(this.playTimeS / 60);
+    var secs = Math.floor(this.playTimeS % 60);
+    return {
+      cash: this.cash,
+      missionsDone: Math.min(this.missions.index, 6),
+      kills: this.combat.kills,
+      carsStolen: this.carsStolen,
+      packages: this.activities.packagesFound,
+      taxiEarned: this.activities.taxiEarned,
+      playTime: mins + 'm ' + (secs < 10 ? '0' : '') + secs + 's'
+    };
   };
 
   GameApp.prototype._initInput = function () {
@@ -140,11 +191,43 @@
       }
       if (e.code === 'KeyE' && self.state === 'playing') self._toggleCar();
       if (e.code === 'KeyR' && self.state === 'playing') self.combat.reload();
+      if (e.code === 'KeyF' && self.state === 'playing' && !self.player.inCar) self._doPunch();
+      if (e.code === 'KeyQ' && self.state === 'playing') {
+        self.combat.cycleWeapon();
+      }
+      if (e.code === 'Digit1' && self.state === 'playing') self.combat.switchWeapon('pistol');
+      if (e.code === 'Digit2' && self.state === 'playing') self.combat.switchWeapon('smg');
+      if (e.code === 'Digit3' && self.state === 'playing') self.combat.switchWeapon('shotgun');
+      // C: cinematic camera — a slow orbit around Leo or the car
+      if (e.code === 'KeyC' && self.state === 'playing') {
+        self.cineMode = !self.cineMode;
+        self._cineT = 0;
+        self.hud.notify(self.cineMode ? 'Cinematic camera — press C again to go back.' : 'Cinematic camera off.', '');
+      }
+      // P: photo mode — hide the whole HUD for a clean shot
+      if (e.code === 'KeyP' && self.state === 'playing') {
+        self._photoMode = !self._photoMode;
+        self.hud.root.style.display = self._photoMode ? 'none' : '';
+      }
+      // V: cycle the radio station (SUNSET FM / BAY 104 / PALMERA GOLD)
+      if (e.code === 'KeyV' && self.state === 'playing') {
+        self.audio.ensure();
+        var station = self.audio.cycleRadio();
+        if (station) self.hud.notify('Radio: ' + station, '');
+      }
+      if (e.code === 'KeyT' && self.state === 'playing') {
+        if (self.player.inCar && self.player.inCar.taxi) {
+          if (!self.activities.taxi) self.activities.startTaxi();
+        } else if (self.activities.taxi) {
+          self.activities.cancelTaxi('job abandoned');
+        }
+      }
       if (e.code === 'Space') e.preventDefault();
     });
     window.addEventListener('keyup', function (e) { self.keys[e.code] = false; });
     canvas.addEventListener('mousedown', function (e) {
       self.dragging = true;
+      self.mouseDown = true;
       self.movedMouse = 0;
       self.lastMouseX = e.clientX; self.lastMouseY = e.clientY;
       self.audio.ensure();
@@ -164,14 +247,26 @@
       }
     });
     window.addEventListener('mouseup', function (e) {
-      if (self.dragging && self.movedMouse < 6 && e.button === 0) self._tryShoot();
+      self.mouseDown = false;
+      // a click (not a drag) fires the pistol; the SMG fires while held
+      if (self.dragging && self.movedMouse < 6 && e.button === 0 &&
+          !self.combat.weaponDef().auto) self._tryShoot();
       self.dragging = false;
     });
     canvas.addEventListener('wheel', function (e) {
       e.preventDefault();
       self.player.camDist = Game.clamp(self.player.camDist + Math.sign(e.deltaY) * 1.2, 4, 14);
     }, { passive: false });
-    window.addEventListener('blur', function () { self.keys = {}; });
+    window.addEventListener('blur', function () { self.keys = {}; self.mouseDown = false; });
+  };
+
+  GameApp.prototype._doPunch = function () {
+    if (!this.player.startPunch()) return;
+    var result = this.combat.punch(this.player, this.peds.peds, this.combat.enemies);
+    if (result === 'ped') {
+      // punching a pedestrian in the street is a crime; enemies are fair game
+      this.wanted.addCrime(1, 'assault');
+    }
   };
 
   GameApp.prototype._initMenus = function () {
@@ -210,10 +305,14 @@
     if (opts.loadSave) save = Game.SaveSystem.load();
     if (save) {
       this.cash = save.cash || 0;
-      this.missions.index = Math.min(save.missionIndex || 0, 4);
+      this.missions.index = Math.min(save.missionIndex || 0, 5);
       this.player.reset(save.x || 0, save.z || 8);
       if (save.hp) this.player.hp = save.hp;
       if (save.hour) this.hour = save.hour;
+      if (save.packages) this.activities.restoreFound(save.packages);
+      if (save.taxiEarned) this.activities.taxiEarned = save.taxiEarned;
+      if (save.kills) this.combat.kills = save.kills;
+      if (save.carsStolen) this.carsStolen = save.carsStolen;
       if (!opts.silent) this.hud.notify('Save loaded — welcome back to Palmera Bay.', 'good');
     } else {
       this.cash = 0;
@@ -225,6 +324,7 @@
     this.combat.clearEnemies();
     this.combat.ammo = CFG.PISTOL_MAG;
     this.combat.reserve = 60;
+    this.combat.weapon = 'pistol';
     this.state = 'playing';
     this.hud.showMenu(false);
     this.hud.hideEnd();
@@ -232,6 +332,8 @@
     this.hud.setCash(this.cash);
     this.hud.setHealth(this.player.hp);
     this.hud.setObjective(this.missions.objectiveText());
+    this.hud.setPackages(this.activities.packagesFound, CFG.PACKAGE_COUNT);
+    this.hud.setWeapon('PISTOL', this.combat.ammo, this.combat.reserve);
     this.hud.showCrosshair(true);
     this.player.snapCamera(this.camera);
     if (!opts.silent) {
@@ -242,7 +344,7 @@
   GameApp.prototype.pauseGame = function () {
     if (this.state !== 'playing') return;
     this.state = 'paused';
-    this.hud.showPause(true);
+    this.hud.showPause(true, this._stats());
     this.audio.setEngine(0, false);
     this.audio.setSiren(0);
   };
@@ -262,21 +364,31 @@
     this.combat.clearEnemies();
     this.combat.ammo = CFG.PISTOL_MAG;
     this.combat.reserve = 60;
+    this.combat.weapon = 'pistol';
     if (this.player.inCar) this._exitCar();
     this.state = 'playing';
     this.player.snapCamera(this.camera);
     this.hud.setHealth(this.player.hp);
+    this.hud.setWeapon('PISTOL', this.combat.ammo, this.combat.reserve);
     this.hud.notify('Back on the streets of Palmera Bay.', 'good');
   };
 
-  GameApp.prototype._onMissionComplete = function (def) {
-    this.cash += def.reward;
+  GameApp.prototype._onMissionComplete = function (def, cleanBonus) {
+    this.cash += def.reward + (cleanBonus || 0);
     this.hud.setCash(this.cash);
     this.audio.cashSound();
+    this._saveNow();
+  };
+
+  GameApp.prototype._saveNow = function () {
     Game.SaveSystem.save({
       missionIndex: this.missions.index,
       cash: this.cash, x: this.player.x, z: this.player.z,
-      hp: this.player.hp, hour: this.hour
+      hp: this.player.hp, hour: this.hour,
+      packages: Object.keys(this.activities.foundIds).map(Number),
+      taxiEarned: this.activities.taxiEarned,
+      kills: this.combat.kills,
+      carsStolen: this.carsStolen
     });
   };
 
@@ -285,6 +397,7 @@
     this.state = 'busted';
     this.audio.setEngine(0, false);
     this.audio.setSiren(0);
+    this.audio.setRotor(0);
     this.hud.showEnd('busted', 'The Palmera Bay PD caught up with Leo. The job will have to wait.');
   };
 
@@ -293,6 +406,7 @@
     this.state = 'wasted';
     this.audio.setEngine(0, false);
     this.audio.setSiren(0);
+    this.audio.setRotor(0);
     this.hud.showEnd('wasted', 'Leo is down. Palmera Bay keeps its secrets — for now.');
   };
 
@@ -302,7 +416,7 @@
     var all = this.parkedCars.concat(this.traffic.cars);
     for (var i = 0; i < all.length; i++) {
       var c = all[i];
-      if (c.police) continue;
+      if (c.police || c.wrecked) continue;
       var d = Game.dist2D(px, pz, c.x, c.z);
       if (d < bestD) { bestD = d; best = c; }
     }
@@ -310,6 +424,10 @@
   };
 
   GameApp.prototype.enterCar = function (car, silent) {
+    if (car.wrecked) {
+      if (!silent) this.hud.notify('This car is wrecked — find another one.', 'bad');
+      return;
+    }
     // stealing a traffic car removes it from traffic
     var ti = this.traffic.cars.indexOf(car);
     if (ti >= 0) this.traffic.cars.splice(ti, 1);
@@ -321,10 +439,12 @@
     this.player.mesh.visible = false;
     this.driveCamOffset = 0;
     if (!car.owned && !silent) {
+      this.carsStolen++;
       this.wanted.addCrime(1, 'car stolen');
       this.hud.notify('Stolen car — the heat is on.', 'bad');
     }
     this.audio.setEngine(0, true);
+    this.audio.doorSlam();
   };
 
   GameApp.prototype._exitCar = function () {
@@ -342,6 +462,7 @@
     car.parked = true;
     this.parkedCars.push(car);
     this.audio.setEngine(0, false);
+    this.audio.doorSlam();
   };
 
   GameApp.prototype._toggleCar = function () {
@@ -384,10 +505,91 @@
     }
   };
 
+  // World extras that run every playing frame: the lighthouse beam sweep,
+  // stunt ramps, Pay 'n Spray, the speed FOV kick, cinematic camera, and the
+  // ramp-jump hop animation.
+  GameApp.prototype._updateWorldExtras = function (dt) {
+    // the lighthouse beam sweeps the bay, day and night
+    if (Game.city && Game.city.lighthouseBeam) {
+      Game.city.lighthouseBeam.rotation.y += dt * 0.5;
+    }
+    var car = this.player.inCar;
+    // stunt ramps: cross one fast and Leo catches air — cash + a whoosh.
+    // Each ramp re-arms a few seconds after use so it can be hit again.
+    if (car && Game.city && Game.city.ramps) {
+      var self = this;
+      Game.city.ramps.forEach(function (ramp) {
+        ramp.coolT = Math.max(0, (ramp.coolT || 0) - dt);
+        if (ramp.coolT <= 0 &&
+            Game.dist2D(car.x, car.z, ramp.x, ramp.z) < 5 &&
+            Math.abs(car.speed) > CFG.STUNT_MIN_SPEED) {
+          ramp.coolT = 4;
+          self._stuntBounce = 0.8;
+          self._addCash(CFG.STUNT_CASH);
+          if (Game.audio) Game.audio.stuntWhoosh();
+          if (Game.hud) Game.hud.notify('STUNT JUMP! +$' + CFG.STUNT_CASH, 'good');
+        }
+      });
+    }
+    // the ramp-jump hop: lift the car mesh on a sine arc while it lasts
+    if (this._stuntBounce > 0) {
+      this._stuntBounce -= dt;
+      if (car) {
+        var phase = 1 - Math.max(0, this._stuntBounce) / 0.8;
+        car.mesh.position.y = Math.sin(phase * Math.PI) * 1.4;
+      }
+    }
+    // Pay 'n Spray: drive into the garage zone, stop, and hold still a
+    // moment — $200 fixes the car and wipes the wanted level clean.
+    var spray = Game.city && Game.city.spray;
+    if (car && spray && Game.dist2D(car.x, car.z, spray.x, spray.z) < CFG.SPRAY_RADIUS &&
+        Math.abs(car.speed) < 5) {
+      this._sprayT += dt;
+      if (this._sprayT > 0.4 && !this._sprayHinted) {
+        this._sprayHinted = true;
+        if (this.hud) this.hud.notify('Pay \'n Spray — hold still: $' + CFG.SPRAY_COST +
+          ' repairs the car and loses the heat.', '');
+      }
+      if (this._sprayT > 1.2 &&
+          (car.health < CFG.CAR_HEALTH || this.wanted.stars > 0) &&
+          this.cash >= CFG.SPRAY_COST) {
+        this._sprayT = 0;
+        this.cash -= CFG.SPRAY_COST;
+        car.health = CFG.CAR_HEALTH;
+        this.wanted.clear();
+        this.police.clearAll();
+        this.hud.setCash(this.cash);
+        if (Game.audio) Game.audio.spray();
+        if (this.hud) this.hud.notify('Pay \'n Spray — fresh paint, clean record. -$' + CFG.SPRAY_COST, 'good');
+        this._saveNow();
+      }
+    } else {
+      this._sprayT = 0;
+      this._sprayHinted = false;
+    }
+    // FOV kick: the faster Leo drives, the wider the lens feels
+    var targetFov = 62;
+    if (car) targetFov = 62 + Math.min(1, Math.abs(car.speed) / car.topSpeed) * 10;
+    if (Math.abs(this._fov - targetFov) > 0.05) {
+      this._fov += (targetFov - this._fov) * Math.min(1, dt * 4);
+      this.camera.fov = this._fov;
+      this.camera.updateProjectionMatrix();
+    }
+    // cinematic camera: a slow orbit around Leo or the car, looking in
+    if (this.cineMode) {
+      this._cineT += dt;
+      var cx = this.player.x + Math.sin(this._cineT * 0.25) * 16;
+      var cz = this.player.z + Math.cos(this._cineT * 0.25) * 16;
+      this.camera.position.set(cx, 5 + Math.sin(this._cineT * 0.15) * 2, cz);
+      this.camera.lookAt(this.player.x, 1.6, this.player.z);
+    }
+  };
+
   GameApp.prototype._carCollisions = function () {
     var pc = this.player.inCar;
     if (!pc) return;
-    var all = this.traffic.cars.concat(this.police.cars);
+    // roadblock cruisers are parked solid — ramming one hurts like a wall
+    var all = this.traffic.cars.concat(this.police.cars, this.police.blocks);
     for (var i = 0; i < all.length; i++) {
       var o = all[i];
       var dx = o.x - pc.x, dz = o.z - pc.z;
@@ -399,6 +601,7 @@
         if (Math.abs(pc.speed) > 6) {
           pc.speed *= 0.6;
           if (o.police) this.wanted.addCrime(1, 'rammed a cruiser');
+          else if (Math.abs(pc.speed) > 12) Game.VehicleFactory.damageCar(pc, 6);
         }
       }
     }
@@ -415,7 +618,13 @@
       ' cash=$' + this.cash +
       ' mission=' + (this.missions.active ? this.missions.active.def.id + ' s' + this.missions.active.stage : (this.missions.completedAll ? 'DONE' : 'none')) +
       ' enemies=' + this.combat.enemiesAlive() +
-      ' ammo=' + this.combat.ammo;
+      ' ammo=' + this.combat.ammo +
+      ' weapon=' + this.combat.weapon +
+      ' packages=' + this.activities.packagesFound + '/' + CFG.PACKAGE_COUNT +
+      ' taxi=' + (this.activities.taxi ? this.activities.taxi.stage : 'none') +
+      ' heli=' + (this.police.heli ? 'up' : 'down') +
+      ' radio=' + CFG.RADIO_STATIONS[this.audio.radioStation || 0] +
+      ' stamina=' + Math.round(this.player.stamina);
   };
 
   GameApp.prototype._loop = function () {
@@ -466,16 +675,24 @@
       this.hud.setHealth(this.player.hp);
       this.hud.setSpeed(this.player.inCar ? Math.abs(this.player.inCar.speed) * 3.6 : 0);
       if (!this.player.inCar) {
-        this.hud.setAmmo(this.combat.ammo, this.combat.reserve, this.combat.reloadT > 0);
+        var wdef = this.combat.weaponDef();
+        this.hud.setWeapon(wdef.name, this.combat.ammo,
+          this.combat.reserveFor(this.combat.weapon));
       } else {
         this.hud.ammoEl.textContent = '';
+        this.hud.weaponEl.textContent = '';
       }
+      this.hud.setPackages(this.activities.packagesFound, CFG.PACKAGE_COUNT);
       this.hud.showCrosshair(!this.player.inCar);
       this.hud.drawMinimap({
         player: this.player,
         missionTarget: this.missions.target,
         policeCars: this.police.cars,
-        enemies: this.combat.enemies
+        blocks: this.police.blocks,
+        buses: this.traffic.buses,
+        enemies: this.combat.enemies,
+        packages: this.activities.packages,
+        heli: this.police.heli
       });
       this._updateDebug();
       this.renderer.render(this.scene, this.camera);
@@ -484,6 +701,12 @@
     // ---- playing ----
     this.hour += dt * 24 / CFG.DAY_LENGTH_S;
     if (this.hour >= 24) this.hour -= 24;
+    this.dayNight.update(this.hour);
+    this.playTimeS += dt;
+    // full-auto fire while the mouse is held (SMG only)
+    if (this.mouseDown && !this.player.inCar && this.combat.weaponDef().auto) {
+      this._tryShoot();
+    }
     var input = {
       f: !!this.keys.KeyW, b: !!this.keys.KeyS,
       l: !!this.keys.KeyA, r: !!this.keys.KeyD,
@@ -501,12 +724,16 @@
       Game.CarController.chaseCamera(this.camera, car, dt, false, this.driveCamOffset);
       this.player.x = car.x; this.player.z = car.z;
       this.player.speedNow = Math.abs(car.speed);
-      this.audio.setEngine(Math.abs(car.speed) / CFG.CAR_MAX_SPEED, true);
+      this.audio.setEngine(Math.abs(car.speed) / car.topSpeed, true);
+      if (this.keys.Space && Math.abs(car.speed) > 15) {
+        this._skidT -= dt;
+        if (this._skidT <= 0) { this.audio.skid(); this._skidT = 0.6; }
+      }
       this._carCollisions();
       this._hitPedestrianCheck();
       this.hud.setSpeed(Math.abs(car.speed) * 3.6);
-      this.hud.setAmmo(0, 0, false);
       this.hud.ammoEl.textContent = '';
+      this.hud.weaponEl.textContent = '';
       this.hud.showCrosshair(false);
     } else {
       this.player.updateOnFoot(input, dt);
@@ -514,7 +741,11 @@
       this.audio.setEngine(0, false);
       this.hud.setSpeed(0);
       this.hud.showCrosshair(true);
+      // on-foot pickups: smuggler packages and weapon crates
+      this.activities.collectPackage(this.player.x, this.player.z);
+      this.combat.collectPickup(this.player.x, this.player.z);
     }
+    this._updateWorldExtras(dt);
     this.traffic.update(dt, this.player.inCar);
     this.peds.update(dt);
     this.police.matchWanted(this.wanted.stars, this.player.x, this.player.z);
@@ -525,31 +756,52 @@
     if (this.player.hp <= 0) this._onWasted();
     this.combat.update(dt, this.player);
     this.missions.update(dt);
+    this.activities.update(dt);
+    // damage vignette: flash red when Leo's health just dropped
+    if (this.player.hp < this._lastHp) {
+      this.hud.flashDamage((this._lastHp - this.player.hp) / 30);
+    }
+    this._lastHp = this.player.hp;
     // HUD
     this.hud.setWanted(this.wanted.stars);
     this.hud.setClock(this.hour);
     this.hud.setHealth(this.player.hp);
-    this.hud.setAmmo(this.combat.ammo, this.combat.reserve, this.combat.reloadT > 0);
+    this.hud.setStamina(this.player.stamina, CFG.STAMINA_MAX, this.player.exhausted);
+    var wd = this.combat.weaponDef();
+    this.hud.setWeapon(wd.name, this.combat.ammo,
+      this.combat.reserveFor(this.combat.weapon));
     this.hud.showHitMarker(this.combat.hitMarkerT > 0);
+    var stage = this.missions.currentStage();
+    if (this.missions.active && stage && stage.type === 'timed') {
+      this.hud.setTimer(this.missions.timer / CFG.M3_TIME_LIMIT_S);
+    } else {
+      this.hud.setTimer(null);
+    }
     this.mapT += dt;
     if (this.mapT > 0.12) {
       this.mapT = 0;
+      var taxiTarget = null;
+      if (this.activities.taxi) {
+        taxiTarget = this.activities.taxi.stage === 'pickup' ?
+          this.activities.taxi.pickup : this.activities.taxi.dest;
+      }
       this.hud.drawMinimap({
         player: this.player,
         missionTarget: this.missions.target,
         policeCars: this.police.cars,
-        enemies: this.combat.enemies
+        blocks: this.police.blocks,
+        buses: this.traffic.buses,
+        enemies: this.combat.enemies,
+        packages: this.activities.packages,
+        taxiTarget: taxiTarget,
+        heli: this.police.heli
       });
     }
     // autosave
     this.saveT += dt;
     if (this.saveT > 20) {
       this.saveT = 0;
-      Game.SaveSystem.save({
-        missionIndex: this.missions.index,
-        cash: this.cash, x: this.player.x, z: this.player.z,
-        hp: this.player.hp, hour: this.hour
-      });
+      this._saveNow();
     }
     this._updateDebug();
     this.renderer.render(this.scene, this.camera);

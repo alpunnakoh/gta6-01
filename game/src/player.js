@@ -1,7 +1,9 @@
 // SUNSET SHORES — player.js
 // PlayerController: Leo Marin on foot — WASD relative to the camera, Shift to
-// run, Space to jump, E to enter/exit the nearest car, mouse-drag orbit camera.
-// Builds Leo's low-poly figure (teal shirt, dark jeans) with a walk-cycle.
+// run, Space to jump, E to enter/exit the nearest car, F to throw a punch,
+// mouse-drag orbit camera. Leo's low-poly figure (teal shirt, dark jeans)
+// has a walk cycle, a punch swing, and slow health regeneration when he
+// stays out of trouble for a while.
 (function () {
   'use strict';
   var CFG = Game.CFG;
@@ -52,6 +54,11 @@
     this.walkPhase = 0;
     this.moving = false;
     this.speedNow = 0;
+    this.punchT = 0;          // seconds left of the punch swing animation
+    this.punchCooldown = 0;
+    this.regenT = 0;          // seconds since the last damage taken
+    this.stamina = CFG.STAMINA_MAX; // sprint drains it, walking restores it
+    this.exhausted = false;   // at 0 stamina Leo cannot sprint until it recovers
     this.mesh.position.set(this.x, 0, this.z);
   }
 
@@ -60,6 +67,8 @@
     this.y = 0; this.vy = 0;
     this.hp = CFG.PLAYER_HP;
     this.inCar = null;
+    this.punchT = 0; this.punchCooldown = 0; this.regenT = 0;
+    this.stamina = CFG.STAMINA_MAX; this.exhausted = false;
     this.mesh.visible = true;
     this.mesh.position.set(x, 0, z);
   };
@@ -73,7 +82,17 @@
     if (input.r) mx += 1;
     var len = Math.sqrt(mx * mx + mz * mz);
     this.moving = len > 0;
-    var speed = input.run ? CFG.RUN_SPEED : CFG.WALK_SPEED;
+    // sprinting drains stamina; at zero Leo is exhausted and must walk
+    // until it recovers past a quarter full
+    var wantRun = input.run && !this.exhausted;
+    var speed = wantRun ? CFG.RUN_SPEED : CFG.WALK_SPEED;
+    if (wantRun && len > 0) {
+      this.stamina -= CFG.STAMINA_DRAIN * dt;
+      if (this.stamina <= 0) { this.stamina = 0; this.exhausted = true; }
+    } else {
+      this.stamina = Math.min(CFG.STAMINA_MAX, this.stamina + CFG.STAMINA_REGEN * dt);
+      if (this.exhausted && this.stamina > CFG.STAMINA_MAX * 0.25) this.exhausted = false;
+    }
     if (len > 0) {
       mx /= len; mz /= len;
       // rotate move vector by camera yaw
@@ -95,12 +114,19 @@
       this.y += this.vy * dt;
       if (this.y <= 0) { this.y = 0; this.vy = 0; }
     }
+    // punch + regen timers
+    if (this.punchT > 0) this.punchT -= dt;
+    if (this.punchCooldown > 0) this.punchCooldown -= dt;
+    this.regenT += dt;
+    if (this.hp < CFG.PLAYER_HP && this.regenT > CFG.HEALTH_REGEN_DELAY_S) {
+      this.hp = Math.min(CFG.PLAYER_HP, this.hp + CFG.HEALTH_REGEN_RATE * dt);
+    }
     // building collision
     var hit = Game.city.collideCircle(this.x, this.z, CFG.PLAYER_RADIUS);
     if (hit) { this.x = hit.x; this.z = hit.z; }
     this.x = Game.clamp(this.x, -CFG.WORLD_HALF, CFG.WORLD_HALF);
     this.z = Game.clamp(this.z, -CFG.WORLD_HALF, CFG.WORLD_HALF + 40);
-    // write to mesh + walk cycle
+    // write to mesh + walk cycle + punch swing (right arm snaps forward)
     var u = this.mesh.userData;
     this.mesh.position.set(this.x, this.y, this.z);
     this.mesh.rotation.y = this.heading;
@@ -108,8 +134,22 @@
     u.legL.rotation.x = swing;
     u.legR.rotation.x = -swing;
     u.armL.rotation.x = -swing * 0.8;
-    u.armR.rotation.x = swing * 0.8;
+    if (this.punchT > 0) {
+      // punch: right arm swings forward and back over ~0.25s
+      var p = 1 - this.punchT / 0.25;
+      u.armR.rotation.x = -Math.sin(p * Math.PI) * 1.5;
+    } else {
+      u.armR.rotation.x = swing * 0.8;
+    }
     u.torso.position.y = 1.16 + (this.moving ? Math.abs(Math.sin(this.walkPhase)) * 0.05 : 0);
+  };
+
+  // Start a punch swing. Returns false when still on cooldown.
+  PlayerController.prototype.startPunch = function () {
+    if (this.punchCooldown > 0 || this.inCar) return false;
+    this.punchT = 0.25;
+    this.punchCooldown = CFG.PUNCH_COOLDOWN_S;
+    return true;
   };
 
   // Third-person orbit camera while on foot.
@@ -134,6 +174,7 @@
 
   PlayerController.prototype.damage = function (amount) {
     this.hp = Math.max(0, this.hp - amount);
+    this.regenT = 0;
     return this.hp <= 0;
   };
 

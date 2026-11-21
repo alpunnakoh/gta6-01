@@ -1,8 +1,10 @@
 // SUNSET SHORES — hud.js
-// HudSystem: the whole DOM overlay — cash, health bar, ammo, wanted stars,
-// in-game clock, speedometer, mission objective panel, notifications, the
-// top-down MINIMAP canvas (player / mission / police / enemy blips), start
-// menu, pause screen, help panel, and Busted / Wasted screens.
+// HudSystem: the whole DOM overlay — cash, health bar, ammo + weapon name,
+// wanted stars, in-game clock, speedometer, mission objective panel,
+// collectibles counter, taxi fare meter, notifications, the top-down MINIMAP
+// canvas (player / mission / police / enemy / package blips), a red damage
+// vignette that flashes when Leo is hurt, the start menu, pause screen with
+// run statistics, help panel, and Busted / Wasted screens.
 (function () {
   'use strict';
   var CFG = Game.CFG;
@@ -17,18 +19,26 @@
   function HudSystem() {
     var root = document.getElementById('hud');
     this.root = root;
+    // damage vignette: red flash at the screen edges when Leo takes a hit
+    this.vignette = el('div', 'vignette', root);
     // top-left: mission objective
     this.objectivePanel = el('div', 'panel objective', root);
     el('div', 'panel-title', this.objectivePanel).textContent = 'THE PALMERA JOB';
     this.objectiveText = el('div', 'objective-text', this.objectivePanel);
     this.objectiveText.textContent = 'Free roam';
-    // top-right: cash + wanted + clock
+    // mission timer bar (timed stages): fills as the clock runs down
+    this.timerWrap = el('div', 'timer-wrap', this.objectivePanel);
+    this.timerBar = el('div', 'timer-bar', this.timerWrap);
+    this.timerWrap.style.display = 'none';
+    // top-right: cash + wanted + clock + packages
     var tr = el('div', 'top-right', root);
     this.cashEl = el('div', 'cash', tr);
     this.cashEl.textContent = '$0';
     this.starsEl = el('div', 'stars', tr);
     this.clockEl = el('div', 'clock', tr);
     this.clockEl.textContent = '17:24';
+    this.packagesEl = el('div', 'packages', tr);
+    this.packagesEl.textContent = 'PACKAGES 0/12';
     // bottom-left: minimap + health
     var bl = el('div', 'bottom-left', root);
     this.mapCanvas = el('canvas', 'minimap', bl);
@@ -38,10 +48,18 @@
     this.healthBar = el('div', 'health-bar', this.healthWrap);
     this.healthText = el('div', 'health-text', this.healthWrap);
     this.healthText.textContent = 'LEO';
-    // bottom-right: speed + ammo
+    // stamina bar (thin, under health): sprinting drains it, walking restores
+    this.staminaWrap = el('div', 'stamina-wrap', bl);
+    this.staminaBar = el('div', 'stamina-bar', this.staminaWrap);
+    // bottom-right: speed + weapon + taxi fare + radio station
     var br = el('div', 'bottom-right', root);
+    this.radioEl = el('div', 'radio', br);
+    this.radioEl.textContent = '♪ SUNSET FM';
+    this.taxiEl = el('div', 'taxi', br);
     this.speedEl = el('div', 'speed', br);
     this.speedEl.textContent = '';
+    this.weaponEl = el('div', 'weapon', br);
+    this.weaponEl.textContent = 'PISTOL';
     this.ammoEl = el('div', 'ammo', br);
     this.ammoEl.textContent = 'PISTOL  12 / 60';
     // centre: crosshair + notifications + hit marker
@@ -59,6 +77,7 @@
     this.btnContinue = document.getElementById('btn-continue');
     this.btnHelp = document.getElementById('btn-help');
     this.pauseScreen = document.getElementById('pause');
+    this.pauseStats = document.getElementById('pause-stats');
     this.endScreen = document.getElementById('end-screen');
     this.endTitle = document.getElementById('end-title');
     this.endText = document.getElementById('end-text');
@@ -90,8 +109,53 @@
     this.healthBar.style.background = hp > 50 ? '#3ddc5a' : (hp > 25 ? '#ffcc33' : '#ff4444');
   };
 
+  // Stamina: thin bar under health. Turns red while Leo is exhausted and
+  // cannot sprint until it recovers.
+  HudSystem.prototype.setStamina = function (value, max, exhausted) {
+    var pct = Math.max(0, Math.min(100, value / max * 100));
+    this.staminaBar.style.width = pct + '%';
+    this.staminaBar.className = 'stamina-bar' + (exhausted ? ' exhausted' : '');
+  };
+
+  HudSystem.prototype.setRadio = function (stationName) {
+    this.radioEl.textContent = '♪ ' + stationName;
+  };
+
+  // A red flash at the screen edges: the harder the hit, the stronger it is.
+  HudSystem.prototype.flashDamage = function (strength) {
+    var v = this.vignette;
+    v.style.opacity = String(Math.min(0.85, 0.25 + (strength || 0.3)));
+    setTimeout(function () { v.style.opacity = '0'; }, 260);
+  };
+
   HudSystem.prototype.setAmmo = function (ammo, reserve, reloading) {
     this.ammoEl.textContent = reloading ? 'RELOADING…' : ('PISTOL  ' + ammo + ' / ' + reserve);
+  };
+
+  HudSystem.prototype.setWeapon = function (name, ammo, reserve) {
+    this.weaponEl.textContent = name;
+    this.ammoEl.textContent = name + '  ' + ammo + ' / ' + reserve;
+  };
+
+  HudSystem.prototype.setPackages = function (found, total) {
+    this.packagesEl.textContent = 'PACKAGES ' + found + '/' + total;
+    this.packagesEl.className = 'packages' + (found === total ? ' done' : '');
+  };
+
+  HudSystem.prototype.setTaxi = function (text) {
+    this.taxiEl.textContent = text || '';
+    this.taxiEl.style.display = text ? 'block' : 'none';
+  };
+
+  // Timed-mission countdown bar: frac 1 = full time left, 0 = out of time.
+  HudSystem.prototype.setTimer = function (frac) {
+    if (frac === null || frac === undefined) {
+      this.timerWrap.style.display = 'none';
+      return;
+    }
+    this.timerWrap.style.display = 'block';
+    this.timerBar.style.width = Math.max(0, Math.min(1, frac)) * 100 + '%';
+    this.timerBar.style.background = frac > 0.35 ? '#ffd21f' : '#ff4444';
   };
 
   HudSystem.prototype.setSpeed = function (kmh) {
@@ -113,11 +177,14 @@
   HudSystem.prototype.notify = function (text, kind) {
     var n = el('div', 'notify ' + (kind || ''), this.notifyBox);
     n.textContent = text;
-    var self = this;
     setTimeout(function () { if (n.parentNode) n.parentNode.removeChild(n); }, 4200);
     while (this.notifyBox.children.length > 3) {
       this.notifyBox.removeChild(this.notifyBox.firstChild);
     }
+  };
+
+  HudSystem.prototype.clearNotifies = function () {
+    while (this.notifyBox.firstChild) this.notifyBox.removeChild(this.notifyBox.firstChild);
   };
 
   HudSystem.prototype.centerMessage = function (text, ms) {
@@ -133,8 +200,18 @@
     this.root.style.display = show ? 'none' : 'block';
   };
 
-  HudSystem.prototype.showPause = function (show) {
+  HudSystem.prototype.showPause = function (show, stats) {
     this.pauseScreen.style.display = show ? 'flex' : 'none';
+    if (show && stats && this.pauseStats) {
+      this.pauseStats.innerHTML =
+        'Cash $' + stats.cash.toLocaleString('en-US') +
+        ' &nbsp;•&nbsp; Jobs ' + stats.missionsDone + '/6' +
+        ' &nbsp;•&nbsp; Kills ' + stats.kills +
+        ' &nbsp;•&nbsp; Cars stolen ' + stats.carsStolen +
+        ' &nbsp;•&nbsp; Packages ' + stats.packages + '/12' +
+        ' &nbsp;•&nbsp; Taxi $' + stats.taxiEarned.toLocaleString('en-US') +
+        ' &nbsp;•&nbsp; ' + stats.playTime;
+    }
   };
 
   HudSystem.prototype.showHelp = function (show) {
@@ -153,12 +230,20 @@
   };
 
   // ---- minimap ----
-  // world: {player, missionTarget, policeCars, policeCops, enemies, traffic}
+  // world: {player, missionTarget, policeCars, policeCops, enemies, traffic,
+  //         packages, taxiTarget, blocks, buses}
   HudSystem.prototype.drawMinimap = function (world) {
     var ctx = this.mapCtx;
     var S = 190, half = CFG.CITY_HALF + 40;
     function toMap(x, z) {
       return [S / 2 + x / half * (S / 2 - 4), S / 2 + z / half * (S / 2 - 4)];
+    }
+    // one helper for every dot on the map: a filled circle or a square
+    function blip(x, z, color, radius, square) {
+      var p = toMap(x, z);
+      ctx.fillStyle = color;
+      if (square) ctx.fillRect(p[0] - radius, p[1] - radius, radius * 2, radius * 2);
+      else { ctx.beginPath(); ctx.arc(p[0], p[1], radius, 0, Math.PI * 2); ctx.fill(); }
     }
     ctx.clearRect(0, 0, S, S);
     ctx.fillStyle = 'rgba(20,26,36,0.85)';
@@ -180,27 +265,44 @@
       var d = toMap(-half, c), e = toMap(half, c);
       ctx.beginPath(); ctx.moveTo(d[0], d[1]); ctx.lineTo(e[0], e[1]); ctx.stroke();
     }
+    // smuggler packages (green dots)
+    (world.packages || []).forEach(function (pk) {
+      if (!pk.taken) blip(pk.x, pk.z, '#3ddc5a', 2.5);
+    });
     // mission marker
     if (world.missionTarget) {
       var m = toMap(world.missionTarget.x, world.missionTarget.z);
-      ctx.fillStyle = '#ffd21f';
-      ctx.beginPath(); ctx.arc(m[0], m[1], 6, 0, Math.PI * 2); ctx.fill();
+      blip(world.missionTarget.x, world.missionTarget.z, '#ffd21f', 6);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(m[0], m[1], 8, 0, Math.PI * 2); ctx.stroke();
     }
-    // enemies (red)
-    ctx.fillStyle = '#ff3333';
+    // taxi target (cyan ring)
+    if (world.taxiTarget) {
+      var tt = toMap(world.taxiTarget.x, world.taxiTarget.z);
+      ctx.strokeStyle = '#4ecdc4'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(tt[0], tt[1], 5, 0, Math.PI * 2); ctx.stroke();
+    }
+    // enemies (red squares)
     (world.enemies || []).forEach(function (en) {
-      var p = toMap(en.x, en.z);
-      ctx.fillRect(p[0] - 2, p[1] - 2, 4, 4);
+      blip(en.x, en.z, '#ff3333', 2, true);
+    });
+    // roadblocks (orange squares) — avoid them or ram through
+    (world.blocks || []).forEach(function (bk) {
+      blip(bk.x, bk.z, '#ff8c42', 3, true);
+    });
+    // city buses (cyan) — slow, predictable, good cover
+    (world.buses || []).forEach(function (bus) {
+      blip(bus.x, bus.z, '#4ecdc4', 2.5, true);
     });
     // police (blue, flashing)
     var flash = Math.floor(performance.now() / 400) % 2 === 0;
-    ctx.fillStyle = flash ? '#3a86ff' : '#ff2020';
     (world.policeCars || []).forEach(function (c) {
-      var p = toMap(c.x, c.z);
-      ctx.beginPath(); ctx.arc(p[0], p[1], 3.5, 0, Math.PI * 2); ctx.fill();
+      blip(c.x, c.z, flash ? '#3a86ff' : '#ff2020', 3.5);
     });
+    // police chopper (bigger flashing dot)
+    if (world.heli) {
+      blip(world.heli.x, world.heli.z, flash ? '#ff2020' : '#ffffff', 5);
+    }
     // player arrow (white, rotated by heading)
     var pp = toMap(world.player.x, world.player.z);
     ctx.save();

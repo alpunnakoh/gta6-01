@@ -1,41 +1,55 @@
 // SUNSET SHORES — city.js
-// buildCity(scene, seed): the whole of Palmera Bay — 9x9 road grid, ~120 procedural
-// buildings with canvas window textures, palms, street lamps, beach + ocean,
-// sunset sky, fog and sun. Exposes Game.city.colliders (building AABBs),
-// Game.city.randomRoadPoint(rng) and Game.city.randomSidewalkPoint(rng).
+// buildCity(scene, seed): the whole of Palmera Bay — a 9x9 road grid, ~120
+// procedural buildings with canvas window textures and rooftop props,
+// billboards and neon signs, palms and street lamps, a boardwalk pier with
+// a getaway boat, beach + ocean, and a low sunset sun. Exposes
+// Game.city.colliders (building AABBs), Game.city.sun / .hemi /
+// .sunSprite / .lampHeads (for the day-night cycle), and
+// Game.city.randomRoadPoint(rng) / randomSidewalkPoint(rng).
 (function () {
   'use strict';
   var CFG = Game.CFG;
 
   var colliders = [];   // {minX,maxX,minZ,maxZ}
-  var palms = [];
-  var lamps = [];
+  var lampHeads = [];   // lamp globe meshes, so night can light them up
+  var palmCount = 0;
 
-  function makeBuildingTexture(rng, baseColor) {
+  function cssHex(hex) {
+    return '#' + ('000000' + hex.toString(16)).slice(-6);
+  }
+
+  // One canvas texture per building: shaded facade, a window grid with some
+  // windows lit, a darker roof line, and — on taller towers — a balcony
+  // stripe so the skyline does not read as flat slabs.
+  function makeBuildingTexture(rng, baseColor, tall) {
     var c = document.createElement('canvas');
     c.width = 128; c.height = 256;
     var g = c.getContext('2d');
     g.fillStyle = baseColor;
     g.fillRect(0, 0, 128, 256);
-    // subtle vertical shading
     var grad = g.createLinearGradient(0, 0, 128, 0);
-    grad.addColorStop(0, 'rgba(0,0,0,0.18)');
-    grad.addColorStop(0.5, 'rgba(255,255,255,0.10)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.22)');
+    grad.addColorStop(0, 'rgba(0,0,0,0.20)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0.12)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.24)');
     g.fillStyle = grad;
     g.fillRect(0, 0, 128, 256);
-    // window grid
     var cols = 4 + Math.floor(rng() * 3);
     var rows = 8 + Math.floor(rng() * 8);
     var ww = 128 / cols, wh = 256 / rows;
     for (var y = 0; y < rows; y++) {
       for (var x = 0; x < cols; x++) {
-        var lit = rng() < 0.28;
-        g.fillStyle = lit ? 'rgba(255,214,140,0.95)' : 'rgba(30,42,60,0.85)';
-        g.fillRect(x * ww + ww * 0.22, y * wh + wh * 0.25, ww * 0.56, wh * 0.5);
+        var lit = rng() < 0.30;
+        g.fillStyle = lit ? 'rgba(255,214,140,0.95)' : 'rgba(28,40,58,0.85)';
+        g.fillRect(x * ww + ww * 0.22, y * wh + wh * 0.25, ww * 0.56, ww * 0.5);
       }
     }
-    // roof line
+    if (tall) {
+      // balcony stripes every few floors on the tall towers
+      g.fillStyle = 'rgba(0,0,0,0.28)';
+      for (var by = 3; by < rows; by += 4) {
+        g.fillRect(0, by * wh - 2, 128, 4);
+      }
+    }
     g.fillStyle = 'rgba(0,0,0,0.35)';
     g.fillRect(0, 0, 128, 6);
     var tex = new THREE.CanvasTexture(c);
@@ -45,28 +59,64 @@
     return tex;
   }
 
-  function cssHex(hex) {
-    return '#' + ('000000' + hex.toString(16)).slice(-6);
+  // A glowing text sign on a canvas texture — billboards and shop fronts.
+  function makeSignTexture(text, fg, bg) {
+    var c = document.createElement('canvas');
+    c.width = 256; c.height = 64;
+    var g = c.getContext('2d');
+    g.fillStyle = bg;
+    g.fillRect(0, 0, 256, 64);
+    g.fillStyle = fg;
+    g.font = 'bold 30px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(text, 128, 34);
+    var tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
   }
 
-  function addBuilding(group, rng, x, z, w, d, h, palette) {
-    var color = palette[Math.floor(rng() * palette.length)];
-    var tex = makeBuildingTexture(rng, cssHex(color));
-    // repeat the window grid so windows stay the same size on any building
+  function addBuilding(group, rng, x, z, w, d, h, palette, opts) {
+    opts = opts || {};
+    var color = opts.color !== undefined ? opts.color : palette[Math.floor(rng() * palette.length)];
+    var tex = makeBuildingTexture(rng, cssHex(color), h > 40);
     tex.repeat.set(Math.max(1, Math.round(w / 15)), Math.max(1, Math.round(h / 15)));
     var mat = new THREE.MeshLambertMaterial({ map: tex });
     var mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     mesh.position.set(x, h / 2, z);
     group.add(mesh);
-    // rooftop box (AC unit / parapet)
-    if (rng() < 0.6) {
+    // rooftop props: AC box and, on some roofs, a water tower
+    if (rng() < 0.65) {
       var roof = new THREE.Mesh(
         new THREE.BoxGeometry(Math.min(4, w * 0.3), 1.6, Math.min(4, d * 0.3)),
         new THREE.MeshLambertMaterial({ color: 0x6a6a6a }));
       roof.position.set(x + (rng() - 0.5) * w * 0.4, h + 0.8, z + (rng() - 0.5) * d * 0.4);
       group.add(roof);
     }
+    if (rng() < 0.22) {
+      var tank = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.2, 2.2, 3.4, 8),
+        new THREE.MeshLambertMaterial({ color: 0x8a5a3a }));
+      tank.position.set(x + (rng() - 0.5) * w * 0.4, h + 3.2, z + (rng() - 0.5) * d * 0.4);
+      group.add(tank);
+      var legs = new THREE.Mesh(
+        new THREE.BoxGeometry(3.4, 1.6, 3.4),
+        new THREE.MeshLambertMaterial({ color: 0x5a4632 }));
+      legs.position.set(tank.position.x, h + 0.8, tank.position.z);
+      group.add(legs);
+    }
+    // neon sign strip on some mid-rise fronts
+    if (opts.sign || rng() < 0.18) {
+      var signTex = makeSignTexture(opts.sign || 'PALMERA',
+        opts.signFg || '#ffd21f', opts.signBg || '#141a24');
+      var sign = new THREE.Mesh(
+        new THREE.PlaneGeometry(Math.min(w * 0.8, 18), 3.2),
+        new THREE.MeshBasicMaterial({ map: signTex }));
+      sign.position.set(x, Math.min(h - 2.5, 12), z + d / 2 + 0.15);
+      group.add(sign);
+    }
     colliders.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
+    return mesh;
   }
 
   function addPalm(group, rng, x, z) {
@@ -77,12 +127,18 @@
     trunk.position.set(x, h / 2, z);
     trunk.rotation.z = (rng() - 0.5) * 0.12;
     group.add(trunk);
+    // layered fronds: two cones so the crown reads as a palm, not a spike
     var crown = new THREE.Mesh(
       new THREE.ConeGeometry(2.6, 2.2, 7),
       new THREE.MeshLambertMaterial({ color: CFG.COLORS.palmLeaf, flatShading: true }));
     crown.position.set(x + trunk.rotation.z * -h * 0.5, h + 0.9, z);
     group.add(crown);
-    palms.push({ x: x, z: z });
+    var crown2 = new THREE.Mesh(
+      new THREE.ConeGeometry(1.9, 1.6, 7),
+      new THREE.MeshLambertMaterial({ color: 0x55a55f, flatShading: true }));
+    crown2.position.set(crown.position.x, h + 1.9, z);
+    group.add(crown2);
+    palmCount++;
   }
 
   function addLamp(group, x, z) {
@@ -96,7 +152,137 @@
       new THREE.MeshBasicMaterial({ color: 0xffe9b0 }));
     head.position.set(x, 5.5, z);
     group.add(head);
-    lamps.push({ x: x, z: z });
+    lampHeads.push(head);
+  }
+
+  // The boardwalk pier: wooden deck on posts out into the ocean, with the
+  // white getaway boat moored at the end (the M6 finale target).
+  function buildPier(group) {
+    var wood = new THREE.MeshLambertMaterial({ color: 0x9a7a52 });
+    var darkWood = new THREE.MeshLambertMaterial({ color: 0x6a5238 });
+    for (var z = CFG.BEACH_Z + 2; z <= CFG.PIER_END_Z; z += 6) {
+      var plank = new THREE.Mesh(new THREE.BoxGeometry(8, 0.4, 5.6), wood);
+      plank.position.set(CFG.PIER_X, 0.9, z);
+      group.add(plank);
+      [-3.4, 3.4].forEach(function (dx) {
+        var post = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2.4, 6), darkWood);
+        post.position.set(CFG.PIER_X + dx, 0.2, z);
+        group.add(post);
+      });
+    }
+    // railings
+    [-4.2, 4.2].forEach(function (dx) {
+      var rail = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, CFG.PIER_END_Z - CFG.BEACH_Z), darkWood);
+      rail.position.set(CFG.PIER_X + dx, 2.0, (CFG.BEACH_Z + CFG.PIER_END_Z) / 2);
+      group.add(rail);
+    });
+    // the boat: white hull, cabin, outboard
+    var boat = new THREE.Group();
+    var hull = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.1, 8),
+      new THREE.MeshLambertMaterial({ color: 0xf2f2f2 }));
+    hull.position.y = 0.6;
+    var cabin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.1, 2.6),
+      new THREE.MeshLambertMaterial({ color: 0x1f8a8a }));
+    cabin.position.set(0, 1.6, -0.6);
+    var motor = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.0, 0.6),
+      new THREE.MeshLambertMaterial({ color: 0x222222 }));
+    motor.position.set(0, 0.7, -4.2);
+    boat.add(hull, cabin, motor);
+    boat.position.set(CFG.PIER_X, 0.4, CFG.PIER_END_Z + 6);
+    group.add(boat);
+    return boat;
+  }
+
+  // Beachfront extras: a lighthouse with a sweeping beam at the pier's far
+  // end, a row of colourful boardwalk shops, stunt ramps on four roads, and
+  // the Pay 'n Spray arch at the garage (drive in to repair and lose heat).
+  // Returns {ramps, spray, lighthouseBeam} for the game loop.
+  function buildBeachExtras(group, rng) {
+    // lighthouse: red-white striped tower on the rocks past the pier
+    var lh = new THREE.Group();
+    var stripeCols = [0xf2f2f2, 0xd8443c];
+    for (var s = 0; s < 5; s++) {
+      var seg = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.2 - s * 0.15, 2.4 - s * 0.15, 3.4, 10),
+        new THREE.MeshLambertMaterial({ color: stripeCols[s % 2] }));
+      seg.position.y = 1.7 + s * 3.4;
+      lh.add(seg);
+    }
+    var lampRoom = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 2, 8),
+      new THREE.MeshLambertMaterial({ color: 0x222222 }));
+    lampRoom.position.y = 19;
+    var lampBulb = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8),
+      new THREE.MeshBasicMaterial({ color: 0xfff2b0 }));
+    lampBulb.position.y = 19;
+    var beam = new THREE.Mesh(new THREE.BoxGeometry(30, 0.5, 1.2),
+      new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.25 }));
+    beam.position.set(15, 19, 0);
+    var beamPivot = new THREE.Group();
+    beamPivot.position.y = 19;
+    beamPivot.add(beam);
+    lh.add(lampRoom, lampBulb, beamPivot);
+    lh.position.set(CFG.PIER_X - 26, 0, CFG.PIER_END_Z + 14);
+    group.add(lh);
+    // boardwalk shops: small striped huts along the sand
+    var shopCols = [0xff6b6b, 0x4ecdc4, 0xffd21f, 0x7a4ec8, 0xff8c42];
+    for (var i = 0; i < 5; i++) {
+      var sx = -160 + i * 80 + rng() * 10;
+      var hut = new THREE.Group();
+      var walls = new THREE.Mesh(new THREE.BoxGeometry(7, 3.4, 5),
+        new THREE.MeshLambertMaterial({ color: shopCols[i % shopCols.length] }));
+      walls.position.y = 1.7;
+      var roof = new THREE.Mesh(new THREE.ConeGeometry(5.2, 2, 4),
+        new THREE.MeshLambertMaterial({ color: 0x8a5a3a }));
+      roof.position.y = 4.4;
+      roof.rotation.y = Math.PI / 4;
+      var counter = new THREE.Mesh(new THREE.BoxGeometry(6, 0.3, 1),
+        new THREE.MeshLambertMaterial({ color: 0xeeeeee }));
+      counter.position.set(0, 1.1, 2.8);
+      hut.add(walls, roof, counter);
+      hut.position.set(sx, 0, CFG.BEACH_Z + 5);
+      group.add(hut);
+    }
+    // stunt ramps: wedges on four roads, each with a trigger zone
+    var ramps = [];
+    var rampSpots = [
+      { x: 54, z: 0, heading: 0 },
+      { x: -54, z: 54, heading: Math.PI / 2 },
+      { x: 0, z: -108, heading: Math.PI },
+      { x: 108, z: -54, heading: -Math.PI / 2 }
+    ];
+    rampSpots.forEach(function (rs) {
+      var wedge = new THREE.Mesh(new THREE.BoxGeometry(6, 1.6, 8),
+        new THREE.MeshLambertMaterial({ color: 0xffd21f }));
+      wedge.position.set(rs.x, 0.8, rs.z);
+      wedge.rotation.y = rs.heading;
+      wedge.rotation.x = 0; // a flat-topped launch pad reads better than a wedge
+      group.add(wedge);
+      var chevron = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.2, 1),
+        new THREE.MeshBasicMaterial({ color: 0x14161a }));
+      chevron.position.set(rs.x, 1.65, rs.z);
+      chevron.rotation.y = rs.heading;
+      group.add(chevron);
+      ramps.push({ x: rs.x, z: rs.z, used: false });
+    });
+    // Pay 'n Spray arch at the garage: two checkered posts + a SPRAY sign
+    var spray = { x: 27, z: -108 };
+    var checker = makeSignTexture('SPRAY', '#14161a', '#ffffff');
+    [-5, 5].forEach(function (dx) {
+      var post = new THREE.Mesh(new THREE.BoxGeometry(0.8, 5, 0.8),
+        new THREE.MeshLambertMaterial({ color: 0x222222 }));
+      post.position.set(spray.x + dx, 2.5, spray.z);
+      group.add(post);
+    });
+    var spraySign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.4),
+      new THREE.MeshBasicMaterial({ map: checker }));
+    spraySign.position.set(spray.x, 5.4, spray.z);
+    group.add(spraySign);
+    var sprayPad = new THREE.Mesh(new THREE.PlaneGeometry(12, 12),
+      new THREE.MeshBasicMaterial({ color: 0x2a6a3a, transparent: true, opacity: 0.5 }));
+    sprayPad.rotation.x = -Math.PI / 2;
+    sprayPad.position.set(spray.x, 0.05, spray.z);
+    group.add(sprayPad);
+    return { ramps: ramps, spray: spray, lighthouseBeam: beamPivot };
   }
 
   function buildCity(scene, seed) {
@@ -108,8 +294,13 @@
     // ---- sky, fog, lights ----
     scene.background = new THREE.Color(C.skyHorizon);
     scene.fog = new THREE.Fog(C.fog, 180, 520);
-    var hemi = new THREE.HemisphereLight(0xffd9b0, 0x4a5a7a, 0.85);
+    // warm hemisphere + a soft eastern fill so the shadow sides of the
+    // buildings never go dead black (v1's right-hand blocks did)
+    var hemi = new THREE.HemisphereLight(0xffd9b0, 0x4a5a7a, 1.0);
     scene.add(hemi);
+    var fill = new THREE.DirectionalLight(0x9fb8d8, 0.45);
+    fill.position.set(160, 120, -120);
+    scene.add(fill);
     var sun = new THREE.DirectionalLight(0xffc98a, 1.6);
     sun.position.set(-140, 90, 260); // low western sun over the ocean
     scene.add(sun);
@@ -172,7 +363,6 @@
       rz.rotation.x = -Math.PI / 2;
       rz.position.set(c, 0.02, 0);
       group.add(rz);
-      // white edge lines so the road reads as a road from the chase cam
       [-1, 1].forEach(function (s) {
         var ex = new THREE.Mesh(edgeGeoX, edgeMat);
         ex.rotation.x = -Math.PI / 2;
@@ -183,7 +373,6 @@
         ez.position.set(c + s * (CFG.ROAD_WIDTH / 2 - 0.5), 0.04, 0);
         group.add(ez);
       });
-      // centre dashes along each road
       for (var d = -CFG.CITY_HALF; d < CFG.CITY_HALF; d += 9) {
         if (Math.abs(d - c) < CFG.ROAD_WIDTH) continue;
         var dx = new THREE.Mesh(dashGeo, dashMat);
@@ -224,17 +413,34 @@
       top.position.set(ux, 2.9, uz);
       group.add(top);
     }
+    var boat = buildPier(group);
+    var extras = buildBeachExtras(group, rng);
 
-    // ---- blocks: buildings, parks, plaza ----
+    // ---- blocks: buildings, parks, plaza, landmarks ----
     var palette = C.buildingPalette;
     var buildingCount = 0;
+    // named landmarks, one per story beat, so the city has places — not
+    // just a grid. The garage (M1), the bank (M5) and the safehouse (M2).
+    var landmarks = [
+      { bx: 0, bz: -2, w: 26, d: 20, h: 14, color: 0x8a6a3a, sign: 'MARINA GARAGE', signFg: '#ffd21f' },
+      { bx: 1, bz: 1, w: 30, d: 24, h: 46, color: 0xe8e2d2, sign: 'BANK OF PALMERA', signFg: '#ffffff', signBg: '#1c4a6a' },
+      { bx: -2, bz: 0, w: 18, d: 16, h: 10, color: 0xc98f7a, sign: 'SAFEHOUSE', signFg: '#7dff8a' }
+    ];
+    var landmarkKey = {};
+    landmarks.forEach(function (lm) { landmarkKey[lm.bx + ',' + lm.bz] = lm; });
     for (var bx = -4; bx < 4; bx++) {
       for (var bz = -4; bz < 4; bz++) {
         var blockCx = (bx + 0.5) * CFG.PITCH;
         var blockCz = (bz + 0.5) * CFG.PITCH;
+        var lm = landmarkKey[bx + ',' + bz];
+        if (lm) {
+          addBuilding(group, rng, blockCx, blockCz, lm.w, lm.d, lm.h, palette,
+            { color: lm.color, sign: lm.sign, signFg: lm.signFg, signBg: lm.signBg });
+          buildingCount++;
+          continue;
+        }
         var roll = rng();
         if (roll < 0.10) {
-          // park: grass + palms
           var park = new THREE.Mesh(new THREE.PlaneGeometry(CFG.BLOCK, CFG.BLOCK),
             new THREE.MeshLambertMaterial({ color: C.grass }));
           park.rotation.x = -Math.PI / 2;
@@ -248,14 +454,12 @@
           continue;
         }
         if (roll < 0.16) {
-          // plaza: open paved square with palms at corners
           addPalm(group, rng, blockCx - 14, blockCz - 14);
           addPalm(group, rng, blockCx + 14, blockCz - 14);
           addPalm(group, rng, blockCx - 14, blockCz + 14);
           addPalm(group, rng, blockCx + 14, blockCz + 14);
           continue;
         }
-        // buildings: 1 tall tower or 2-4 mid-rise
         var centreDist = Math.abs(blockCx) + Math.abs(blockCz);
         var tallBoost = centreDist < 110 ? 26 : 0;
         if (rng() < 0.35) {
@@ -292,9 +496,16 @@
       group: group,
       colliders: colliders,
       buildingCount: buildingCount,
-      palmCount: palms.length,
+      palmCount: palmCount,
+      sun: sun,
+      hemi: hemi,
+      sunSprite: sunSprite,
+      lampHeads: lampHeads,
+      boat: boat,
+      ramps: extras.ramps,
+      spray: extras.spray,
+      lighthouseBeam: extras.lighthouseBeam,
       randomRoadPoint: function (r) {
-        // random point on a random road, lane offset included
         var horizontal = r() < 0.5;
         var road = (Math.floor(r() * 9) - 4) * CFG.PITCH;
         var along = (r() * 2 - 1) * (CFG.CITY_HALF - 10);

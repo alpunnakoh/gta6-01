@@ -1,10 +1,25 @@
 /* SUNSET SHORES — style.css
-   HUD + menu styling. Sunset palette: deep navy, warm orange, gold. */
+   HUD + menu styling. Sunset palette: deep navy, warm orange, gold.
+   New in v2: damage vignette, weapon label, packages counter, taxi fare
+   meter, mission timer bar, pause-run statistics. New in v3: CSS palette
+   variables, stamina bar, radio label, menu features strip. */
+:root {
+  --navy: #141a24;
+  --panel-bg: rgba(12, 18, 30, 0.72);
+  --gold: #ffd21f;
+  --gold-soft: #ffe9a8;
+  --green: #3ddc5a;
+  --cyan: #4ecdc4;
+  --orange: #ff7a1a;
+  --red: #ff4444;
+  --ink: #fff;
+  --muted: rgba(255, 255, 255, 0.75);
+}
 html, body {
   margin: 0; padding: 0; height: 100%; overflow: hidden;
   background: #1a2233;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-  color: #fff;
+  color: var(--ink);
   user-select: none;
 }
 #game { position: fixed; inset: 0; }
@@ -20,6 +35,13 @@ html, body {
 }
 body.shot-mode #debug { display: none; }
 
+/* red flash at the screen edges when Leo is hurt */
+.vignette {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(255,30,30,0.55) 100%);
+  opacity: 0; transition: opacity 0.45s;
+}
+
 .panel {
   position: absolute; background: rgba(12,18,30,0.72);
   border: 1px solid rgba(255,210,31,0.35); border-radius: 8px;
@@ -28,6 +50,14 @@ body.shot-mode #debug { display: none; }
 .panel-title { font-size: 11px; letter-spacing: 2px; color: #ffd21f; font-weight: 700; }
 .objective { top: 12px; left: 12px; max-width: 420px; }
 .objective-text { font-size: 15px; margin-top: 3px; text-shadow: 0 1px 2px #000; }
+
+/* timed-mission countdown bar under the objective */
+.timer-wrap {
+  margin-top: 7px; height: 8px; border-radius: 4px;
+  background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.35);
+  overflow: hidden;
+}
+.timer-bar { height: 100%; width: 100%; background: #ffd21f; }
 
 .top-right { position: absolute; top: 12px; right: 12px; text-align: right; }
 .cash {
@@ -38,6 +68,8 @@ body.shot-mode #debug { display: none; }
 .stars.hot { color: #ffd21f; animation: starpulse 0.9s infinite alternate; }
 @keyframes starpulse { from { transform: scale(1); } to { transform: scale(1.08); } }
 .clock { font-size: 15px; color: #dfe8f2; text-shadow: 0 1px 2px #000; margin-top: 2px; }
+.packages { font-size: 13px; font-weight: 700; letter-spacing: 1px; color: #3ddc5a; text-shadow: 0 1px 2px #000; margin-top: 2px; }
+.packages.done { color: #ffd21f; }
 
 .bottom-left { position: absolute; left: 12px; bottom: 12px; }
 .minimap {
@@ -56,11 +88,31 @@ body.shot-mode #debug { display: none; }
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 700; letter-spacing: 2px; text-shadow: 0 1px 2px #000;
 }
+/* stamina bar: thin, under health; red while Leo is exhausted */
+.stamina-wrap {
+  margin-top: 4px; width: 190px; height: 7px;
+  background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 4px; overflow: hidden;
+}
+.stamina-bar { height: 100%; width: 100%; background: var(--cyan); transition: width 0.15s; }
+.stamina-bar.exhausted { background: var(--red); }
 
 .bottom-right { position: absolute; right: 12px; bottom: 12px; text-align: right; }
+.radio {
+  font-size: 13px; font-weight: 800; letter-spacing: 2px; color: var(--cyan);
+  text-shadow: 0 1px 2px #000; margin-bottom: 6px;
+}
+.taxi {
+  font-size: 16px; font-weight: 800; color: #4ecdc4;
+  text-shadow: 0 2px 3px #000; margin-bottom: 6px; display: none;
+}
 .speed {
   font-size: 30px; font-weight: 800; color: #fff;
   text-shadow: 0 2px 4px #000;
+}
+.weapon {
+  font-size: 13px; font-weight: 800; letter-spacing: 2px; color: #ffd21f;
+  text-shadow: 0 1px 2px #000;
 }
 .ammo {
   font-size: 16px; font-weight: 700; color: #ffe9a8;
@@ -117,6 +169,10 @@ body.shot-mode #debug { display: none; }
 #end-title.busted { color: #6aa8ff; }
 #end-title.wasted { color: #ff5555; }
 .subtitle { font-size: 17px; line-height: 1.5; color: #f2e9d8; text-shadow: 0 1px 3px #000; }
+.stats-line {
+  font-size: 14px; font-weight: 700; color: #ffe9a8;
+  text-shadow: 0 1px 2px #000; margin: 4px 0 0; line-height: 1.6;
+}
 .menu-buttons { display: flex; flex-direction: column; gap: 10px; align-items: center; margin: 22px 0 14px; }
 .btn {
   pointer-events: auto; cursor: pointer;
@@ -129,6 +185,17 @@ body.shot-mode #debug { display: none; }
 .btn.primary { background: #ff7a1a; border-color: #ffb066; }
 .btn.primary:hover { background: #ff8c38; }
 .menu-foot { font-size: 13px; color: rgba(255,255,255,0.75); text-shadow: 0 1px 2px #000; }
+/* menu features strip: what v3 added, one line, gold chips */
+.features-strip {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  margin: 16px 0 4px;
+}
+.features-strip span {
+  font-size: 11px; font-weight: 800; letter-spacing: 1.5px;
+  color: var(--gold-soft);
+  background: rgba(12,18,30,0.72); border: 1px solid rgba(255,210,31,0.45);
+  border-radius: 20px; padding: 5px 12px; text-shadow: 0 1px 2px #000;
+}
 .help-table { margin: 10px auto; border-collapse: collapse; font-size: 16px; text-align: left; }
 .help-table td { padding: 5px 14px; }
 .help-table td:first-child { font-weight: 800; color: #ffd21f; white-space: nowrap; }
