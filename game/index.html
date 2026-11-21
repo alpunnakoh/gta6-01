@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunset Shores — Palmera Bay</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="game"></div>
+
+<!-- HUD overlay -->
+<div id="hud">
+  <div id="debug" aria-live="polite"></div>
+</div>
+
+<!-- Start menu -->
+<div id="menu" class="overlay">
+  <div class="menu-inner">
+    <div class="menu-kicker">PALMERA BAY &middot; A SUNSET CITY</div>
+    <h1>SUNSET<br>SHORES</h1>
+    <p class="subtitle">Leo Marin is back in Palmera Bay — one last job, five missions,<br>
+    a whole city to steal, drive and outrun.</p>
+    <div class="menu-buttons">
+      <button id="btn-new" class="btn primary">NEW GAME</button>
+      <button id="btn-continue" class="btn">CONTINUE</button>
+      <button id="btn-help" class="btn">HOW TO PLAY</button>
+    </div>
+    <p class="menu-foot">WASD move &middot; mouse drag camera &middot; E enter car &middot; Shift run &middot; Space jump / handbrake &middot; click shoot &middot; R reload &middot; J start job &middot; Esc pause &middot; M mute</p>
+  </div>
+</div>
+
+<!-- Pause -->
+<div id="pause" class="overlay" style="display:none">
+  <div class="menu-inner">
+    <h2>PAUSED</h2>
+    <p class="subtitle">Palmera Bay waits for no one. Well — except now.</p>
+    <div class="menu-buttons">
+      <button id="btn-resume" class="btn primary">RESUME</button>
+      <button id="btn-quit-menu" class="btn">QUIT TO MENU</button>
+    </div>
+  </div>
+</div>
+
+<!-- Busted / Wasted -->
+<div id="end-screen" class="overlay" style="display:none">
+  <div class="menu-inner">
+    <h2 id="end-title" class="busted">BUSTED</h2>
+    <p id="end-text" class="subtitle"></p>
+    <div class="menu-buttons">
+      <button id="btn-respawn" class="btn primary">BACK TO THE STREETS</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help -->
+<div id="help" class="overlay" style="display:none">
+  <div class="menu-inner help-inner">
+    <h2>HOW TO PLAY</h2>
+    <table class="help-table">
+      <tr><td>W A S D</td><td>Move / drive</td></tr>
+      <tr><td>Mouse drag</td><td>Orbit camera (look around while driving)</td></tr>
+      <tr><td>Shift</td><td>Run</td></tr>
+      <tr><td>Space</td><td>Jump on foot / handbrake in a car</td></tr>
+      <tr><td>E</td><td>Enter / exit the nearest car</td></tr>
+      <tr><td>Left click</td><td>Shoot the pistol (on foot)</td></tr>
+      <tr><td>R</td><td>Reload</td></tr>
+      <tr><td>J</td><td>Start the next job</td></tr>
+      <tr><td>Esc</td><td>Pause</td></tr>
+      <tr><td>M</td><td>Mute / unmute</td></tr>
+      <tr><td>H</td><td>This help</td></tr>
+    </table>
+    <p class="subtitle">Follow the yellow marker. Stealing cars, shooting and hitting
+    pedestrians raise your wanted level — hide from the police until the stars drop.
+    Your progress saves automatically.</p>
+    <div class="menu-buttons">
+      <button id="btn-close-help" class="btn primary">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="src/config.js"></script>
+<script src="src/city.js"></script>
+<script src="src/vehicles.js"></script>
+<script src="src/player.js"></script>
+<script src="src/traffic.js"></script>
+<script src="src/police.js"></script>
+<script src="src/missions.js"></script>
+<script src="src/combat.js"></script>
+<script src="src/hud.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/save.js"></script>
+<script src="src/shots.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>
